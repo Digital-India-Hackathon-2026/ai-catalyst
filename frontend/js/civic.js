@@ -1041,31 +1041,39 @@ window.openAssignmentModal = async function(cid) {
       const emp = rec.employee;
       const row = document.createElement("div");
       row.className = "employee-comparison-card glass-card";
+      row.style = "display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem; margin-bottom: 1rem; width: 100%; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; background: rgba(255, 255, 255, 0.015);";
+      
       row.innerHTML = `
-        <div class="employee-avatar-col">
-          <img src="${emp.profile_photo || 'https://via.placeholder.com/150'}" alt="${emp.full_name}">
-        </div>
-        <div class="employee-info-col">
-          <h5>${emp.full_name}</h5>
-          <p>${emp.designation}</p>
-          <span style="font-size:0.7rem; color:var(--text-muted);"><i class="fa-solid fa-circle" style="color: ${emp.status==='Available'?'#10b981':'#ef4444'}; font-size:0.6rem;"></i> ${emp.status}</span>
-        </div>
-        <div class="employee-stats-col">
-          <div class="stat-box">
-            <span>Workload</span>
-            <strong>${emp.current_workload} active</strong>
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 1rem;">
+          <div style="display: flex; gap: 1rem; align-items: center;">
+            <img src="${emp.profile_photo || 'https://via.placeholder.com/150'}" alt="${emp.full_name}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255, 255, 255, 0.1);">
+            <div>
+              <h5 style="font-size: 0.95rem; font-weight: 700; margin: 0; color: #fff;">${emp.full_name} <span style="font-size: 0.75rem; color: var(--text-muted);">(${emp.employee_id})</span></h5>
+              <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0.15rem 0 0 0;">${emp.designation} | Dept: <strong>${emp.department}</strong></p>
+            </div>
           </div>
-          <div class="stat-box">
-            <span>Rating</span>
-            <strong>${emp.rating.toFixed(1)} / 5</strong>
-          </div>
-          <div class="stat-box">
-            <span>Distance</span>
-            <strong>${rec.distance_km} km</strong>
+          <div>
+            <button class="btn btn-outline" onclick="executeAssignment(${cid}, ${emp.id}, true)" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; border-color: var(--color-warning); color: #fff;"><i class="fa-solid fa-user-pen"></i> Assign Override</button>
           </div>
         </div>
-        <div>
-          <button class="btn btn-outline" onclick="executeAssignment(${cid}, ${emp.id}, true)" style="padding: 0.35rem 0.5rem; font-size: 0.75rem; border-color:var(--color-warning); color:#fff;">Assign Override</button>
+
+        <div class="emp-params-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 0.75rem; font-size: 0.75rem; width: 100%;">
+          <div><span style="color: var(--text-muted);">Experience:</span> <strong style="color: #fff;">${emp.experience_years} Years</strong></div>
+          <div style="grid-column: span 2;"><span style="color: var(--text-muted);">Specialization:</span> <strong style="color: #fff;">${emp.specialization}</strong></div>
+          <div><span style="color: var(--text-muted);">Attendance:</span> <strong style="color: var(--color-success);">${emp.attendance_percentage}%</strong></div>
+          
+          <div><span style="color: var(--text-muted);">Efficiency:</span> <strong style="color: var(--color-primary);">${emp.efficiency_percentage}%</strong></div>
+          <div><span style="color: var(--text-muted);">Rating:</span> <strong style="color: #fbbf24;"><i class="fa-solid fa-star"></i> ${emp.rating.toFixed(1)}/5</strong></div>
+          <div><span style="color: var(--text-muted);">Avg Resol. Time:</span> <strong style="color: #fff;">${emp.avg_resolution_time.toFixed(1)} hrs</strong></div>
+          <div><span style="color: var(--text-muted);">Current Workload:</span> <strong style="color: var(--color-warning);">${emp.current_workload} active</strong></div>
+          
+          <div><span style="color: var(--text-muted);">Completed:</span> <strong style="color: var(--color-success);">${emp.total_completed} jobs</strong></div>
+          <div><span style="color: var(--text-muted);">Pending:</span> <strong style="color: var(--color-warning);">${emp.total_pending} jobs</strong></div>
+          <div><span style="color: var(--text-muted);">Availability:</span> <strong style="color: ${emp.status==='Available'?'var(--color-success)':'var(--color-danger)'};">${emp.status}</strong></div>
+          <div><span style="color: var(--text-muted);">Leave Status:</span> <strong style="color: ${emp.leave_status==='Active'?'var(--color-success)':'var(--color-danger)'};">${emp.leave_status}</strong></div>
+          
+          <div style="grid-column: span 2;"><span style="color: var(--text-muted);">Current Location:</span> <strong style="font-family: monospace; color: #fff;">(${emp.lat.toFixed(4)}, ${emp.lng.toFixed(4)})</strong></div>
+          <div style="grid-column: span 2;"><span style="color: var(--text-muted);">Distance:</span> <strong style="color: var(--color-primary);">${rec.distance_km} km away</strong></div>
         </div>
       `;
       empList.appendChild(row);
