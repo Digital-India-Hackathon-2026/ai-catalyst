@@ -48,12 +48,20 @@
         </div>
         <form id="login-form">
           <div class="form-group">
+            <label for="login-role">Account Type (Role)</label>
+            <select id="login-role" class="form-control">
+              <option value="Citizen">Citizen</option>
+              <option value="Employee">Employee (Field Officer)</option>
+              <option value="Admin">Admin (Supervisor)</option>
+            </select>
+          </div>
+          <div class="form-group">
             <label for="login-username">Username</label>
             <input type="text" id="login-username" class="form-control" placeholder="e.g. citizen" required>
           </div>
-          <div class="form-group">
+          <div class="form-group" id="login-password-group" style="display: none;">
             <label for="login-password">Password</label>
-            <input type="password" id="login-password" class="form-control" placeholder="e.g. citizen123" required>
+            <input type="password" id="login-password" class="form-control" placeholder="Enter password">
           </div>
           <button type="submit" class="btn" style="width: 100%; margin-top: 1rem;">
             <i class="fa-solid fa-right-to-bracket"></i> Authenticate
@@ -71,6 +79,14 @@
         </div>
         <form id="register-form">
           <div class="form-group">
+            <label for="reg-role">Account Type (Role)</label>
+            <select id="reg-role" class="form-control">
+              <option value="Citizen">Citizen</option>
+              <option value="Employee">Employee (Field Officer)</option>
+              <option value="Admin">Admin (Supervisor)</option>
+            </select>
+          </div>
+          <div class="form-group">
             <label for="reg-name">Full Name</label>
             <input type="text" id="reg-name" class="form-control" placeholder="e.g. Ramesh Kumar" required>
           </div>
@@ -78,17 +94,9 @@
             <label for="reg-username">Username</label>
             <input type="text" id="reg-username" class="form-control" placeholder="e.g. ramesh_k" required>
           </div>
-          <div class="form-group">
+          <div class="form-group" id="reg-password-group" style="display: none;">
             <label for="reg-password">Password</label>
-            <input type="password" id="reg-password" class="form-control" placeholder="Create password" required>
-          </div>
-          <div class="form-group">
-            <label for="reg-role">Account Type (Role)</label>
-            <select id="reg-role" class="form-control">
-              <option value="Citizen">Citizen</option>
-              <option value="Employee">Employee (Field Officer)</option>
-              <option value="Admin">Admin (Supervisor)</option>
-            </select>
+            <input type="password" id="reg-password" class="form-control" placeholder="Create password">
           </div>
           <button type="submit" class="btn" style="width: 100%; margin-top: 1rem;">
             <i class="fa-solid fa-user-plus"></i> Join GovConnect

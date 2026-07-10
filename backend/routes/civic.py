@@ -27,11 +27,19 @@ def register():
     role = data.get('role')
     full_name = data.get('full_name')
     
-    if not all([username, password, role, full_name]):
-        return jsonify({"error": "Missing required fields"}), 400
+    if not role:
+        return jsonify({"error": "Missing role"}), 400
         
     if role not in ['Citizen', 'Employee', 'Admin']:
         return jsonify({"error": "Invalid role"}), 400
+        
+    if role == 'Citizen':
+        if not all([username, full_name]):
+            return jsonify({"error": "Missing required fields"}), 400
+        password = ""
+    else:
+        if not all([username, password, full_name]):
+            return jsonify({"error": "Missing required fields"}), 400
         
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -75,19 +83,25 @@ def login():
     username = data.get('username')
     password = data.get('password')
     
-    if not username or not password:
-        return jsonify({"error": "Missing credentials"}), 400
+    if not username:
+        return jsonify({"error": "Missing username"}), 400
         
     conn = get_db_connection()
     cursor = conn.cursor()
     
     try:
-        cursor.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, password))
+        cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
         user = cursor.fetchone()
         if not user:
             return jsonify({"error": "Invalid username or password"}), 401
             
         user_dict = dict(user)
+        
+        # If user is not Citizen, check password
+        if user_dict['role'] != 'Citizen':
+            if not password or user_dict['password'] != password:
+                return jsonify({"error": "Invalid username or password"}), 401
+            
         del user_dict['password'] # remove password from response
         
         # If user is an employee, attach employee profile fields

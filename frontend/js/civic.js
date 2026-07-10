@@ -36,6 +36,12 @@ function showAuth() {
   document.getElementById("login-form").reset();
   document.getElementById("register-form").reset();
   
+  // Reset password group display and requirements (default Citizen selected)
+  document.getElementById("login-password-group").style.display = "none";
+  document.getElementById("login-password").required = false;
+  document.getElementById("reg-password-group").style.display = "none";
+  document.getElementById("reg-password").required = false;
+  
   toggleAuthView("login");
 }
 
@@ -59,12 +65,40 @@ function setupAuthEvents() {
     e.preventDefault();
     toggleAuthView("login");
   });
+
+  // Toggle password fields based on role selection
+  document.getElementById("login-role").addEventListener("change", (e) => {
+    const passwordGroup = document.getElementById("login-password-group");
+    const passwordInput = document.getElementById("login-password");
+    if (e.target.value === "Citizen") {
+      passwordGroup.style.display = "none";
+      passwordInput.required = false;
+      passwordInput.value = "";
+    } else {
+      passwordGroup.style.display = "block";
+      passwordInput.required = true;
+    }
+  });
+
+  document.getElementById("reg-role").addEventListener("change", (e) => {
+    const passwordGroup = document.getElementById("reg-password-group");
+    const passwordInput = document.getElementById("reg-password");
+    if (e.target.value === "Citizen") {
+      passwordGroup.style.display = "none";
+      passwordInput.required = false;
+      passwordInput.value = "";
+    } else {
+      passwordGroup.style.display = "block";
+      passwordInput.required = true;
+    }
+  });
   
   // Login Submit
   document.getElementById("login-form").addEventListener("submit", async (e) => {
     e.preventDefault();
+    const role = document.getElementById("login-role").value;
     const username = document.getElementById("login-username").value.trim();
-    const password = document.getElementById("login-password").value;
+    const password = role === "Citizen" ? "" : document.getElementById("login-password").value;
     
     try {
       const response = await fetch(`${API_BASE}/api/civic/auth/login`, {
@@ -90,10 +124,10 @@ function setupAuthEvents() {
   // Register Submit
   document.getElementById("register-form").addEventListener("submit", async (e) => {
     e.preventDefault();
+    const role = document.getElementById("reg-role").value;
     const full_name = document.getElementById("reg-name").value.trim();
     const username = document.getElementById("reg-username").value.trim();
-    const password = document.getElementById("reg-password").value;
-    const role = document.getElementById("reg-role").value;
+    const password = role === "Citizen" ? "" : document.getElementById("reg-password").value;
     
     try {
       const response = await fetch(`${API_BASE}/api/civic/auth/register`, {
