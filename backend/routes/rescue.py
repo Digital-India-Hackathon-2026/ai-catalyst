@@ -600,17 +600,32 @@ def manage_emergency(eid):
             emergency['audit_trail'] = [dict(r) for r in cursor.fetchall()]
             return jsonify(emergency)
 
-        # PATCH – supervisor action
+        # PATCH – supervisor/team action
         data   = request.json or {}
         action = data.get('action')   # 'approve', 'close', 'modify' (optional)
         status_input = data.get('status') # Allow direct status update
         note   = data.get('note', '')
         actor  = data.get('actor', 'Supervisor')
-
-        if not action and not status_input:
-            return jsonify({"error": "action or status is required."}), 400
+        
+        team_lat = data.get('team_lat')
+        team_lng = data.get('team_lng')
 
         now = datetime.now().isoformat()
+
+        # Update coordinates if provided
+        if team_lat is not None and team_lng is not None:
+            cursor.execute("""
+            UPDATE rescue_emergencies SET team_lat = ?, team_lng = ?, updated_at = ?
+            WHERE emergency_id = ?
+            """, (team_lat, team_lng, now, eid))
+
+        if not action and not status_input:
+            conn.commit()
+            return jsonify({
+                "message": f"Emergency {eid} team GPS updated.",
+                "team_lat": team_lat,
+                "team_lng": team_lng
+            })
 
         STATUS_MAP = {
             'approve': 'Team Dispatched',
@@ -652,6 +667,7 @@ def manage_emergency(eid):
         return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
+
 
 
 @rescue_bp.route('/api/rescue/track/<eid>', methods=['GET'])
@@ -713,3 +729,27 @@ def track_emergency(eid):
         return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
+
+
+@rescue_bp.route('/api/rescue/transcribe', methods=['POST'])
+def transcribe_speech():
+    """
+    Speech-to-text transcription endpoint using Deepgram.
+    Expects audio file in request.files['file'].
+    """
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    try:
+        from services.deepgram_service import transcribe_audio
+        audio_data = file.read()
+        content_type = file.content_type or 'audio/webm'
+        transcript = transcribe_audio(audio_data, content_type)
+        return jsonify({"transcript": transcript})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+

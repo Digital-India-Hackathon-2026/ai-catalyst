@@ -750,6 +750,12 @@ textarea.form-control {
   background: rgba(245, 158, 11, 0.03);
 }
 
+.emergency-card.selected-card {
+  border-color: var(--rescue-primary) !important;
+  background: rgba(245, 158, 11, 0.08) !important;
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.25) !important;
+}
+
 .ec-top {
   display: flex;
   align-items: flex-start;
@@ -1104,4 +1110,31 @@ textarea.form-control {
 .team-btn.btn-secondary:hover {
   background: rgba(255, 255, 255, 0.08);
   transform: translateY(-1px);
+}
+
+/* ─── Speech Recording States ──────────────── */
+@keyframes pulse-red {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+@keyframes spin-ring {
+  to { transform: rotate(360deg); }
+}
+
+.voice-loading-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(245, 158, 11, 0.2);
+  border-top: 2px solid var(--rescue-primary);
+  border-radius: 50%;
+  animation: spin-ring 0.8s linear infinite;
+  display: inline-block;
+}
+
+#record-btn.recording-active {
+  border-color: #ef4444 !important;
+  color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.05) !important;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.15) !important;
 }
