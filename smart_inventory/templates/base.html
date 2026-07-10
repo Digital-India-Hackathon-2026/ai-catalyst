@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Smart Inventory for ASHA Workers{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chatbot.css') }}">
+    <!-- Load FontAwesome for professional icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Load Chart.js for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -31,7 +34,7 @@
         <!-- Sidebar Navigation -->
         <aside class="app-sidebar">
             <div class="sidebar-logo">
-                <span class="sidebar-logo-icon">🏥</span>
+                <span class="sidebar-logo-icon"><i class="fa-solid fa-house-medical"></i></span>
                 <span class="sidebar-logo-text">ASHA Inventory</span>
             </div>
             
@@ -39,49 +42,50 @@
                 {% if session['role'] == 'asha' %}
                     <li>
                         <a href="{{ url_for('asha.asha_dashboard') }}" class="sidebar-link {% if request.endpoint == 'asha.asha_dashboard' %}active{% endif %}">
-                            <span class="sidebar-logo-icon">📊</span>
+                            <span class="sidebar-logo-icon"><i class="fa-solid fa-gauge-high"></i></span>
                             <span>Dashboard</span>
                         </a>
                     </li>
                     <li>
                         <a href="{{ url_for('asha.inventory') }}" class="sidebar-link {% if request.endpoint == 'asha.inventory' or request.endpoint == 'asha.edit_medicine' %}active{% endif %}">
-                            <span class="sidebar-logo-icon">📦</span>
-                            <span>Medicine Inventory</span>
+                            <span class="sidebar-logo-icon"><i class="fa-solid fa-box-open"></i></span>
+                            <span>My Medicines</span>
                         </a>
                     </li>
                     <li>
                         <a href="{{ url_for('asha.add_medicine') }}" class="sidebar-link {% if request.endpoint == 'asha.add_medicine' %}active{% endif %}">
-                            <span class="sidebar-logo-icon">➕</span>
-                            <span>Add Medicine</span>
+                            <span class="sidebar-logo-icon"><i class="fa-solid fa-plus"></i></span>
+                            <span>Add New Medicine</span>
                         </a>
                     </li>
                     <li>
                         <a href="{{ url_for('asha.distribution') }}" class="sidebar-link {% if request.endpoint == 'asha.distribution' %}active{% endif %}">
-                            <span class="sidebar-logo-icon">🤝</span>
-                            <span>Stock Distribution</span>
+                            <span class="sidebar-logo-icon"><i class="fa-solid fa-hand-holding-medical"></i></span>
+                            <span>Give Medicine</span>
                         </a>
                     </li>
                     <li>
                         <a href="{{ url_for('asha.transactions') }}" class="sidebar-link {% if request.endpoint == 'asha.transactions' %}active{% endif %}">
-                            <span class="sidebar-logo-icon">📜</span>
-                            <span>Transaction History</span>
+                            <span class="sidebar-logo-icon"><i class="fa-solid fa-file-waveform"></i></span>
+                            <span>My History</span>
                         </a>
+                    </li>
                     <li>
                         <a href="{{ url_for('asha.request_history') }}" class="sidebar-link {% if 'request' in request.endpoint or 'delivery' in request.endpoint %}active{% endif %}">
-                            <span class="sidebar-logo-icon">📝</span>
-                            <span>Request Stocks</span>
+                            <span class="sidebar-logo-icon"><i class="fa-solid fa-notes-medical"></i></span>
+                            <span>Ask for More</span>
                         </a>
                     </li>
                 {% elif session['role'] == 'mandal' %}
                     <li>
                         <a href="{{ url_for('mandal.mandal_dashboard') }}" class="sidebar-link {% if request.endpoint == 'mandal.mandal_dashboard' or request.endpoint == 'mandal.village_inventory' or (request.endpoint == 'mandal.request_view' and not session['role'] == 'asha') %}active{% endif %}">
-                            <span class="sidebar-logo-icon">🏥</span>
+                            <span class="sidebar-logo-icon"><i class="fa-solid fa-hospital"></i></span>
                             <span>Mandal Dashboard</span>
                         </a>
                     </li>
                     <li>
                         <a href="{{ url_for('mandal.reports') }}" class="sidebar-link {% if request.endpoint == 'mandal.reports' %}active{% endif %}">
-                            <span class="sidebar-logo-icon">📊</span>
+                            <span class="sidebar-logo-icon"><i class="fa-solid fa-chart-column"></i></span>
                             <span>Mandal Reports</span>
                         </a>
                     </li>
@@ -89,7 +93,7 @@
                 
                 <li>
                     <a href="{{ url_for('auth.logout') }}" class="sidebar-link">
-                        <span class="sidebar-logo-icon">🚪</span>
+                        <span class="sidebar-logo-icon"><i class="fa-solid fa-right-from-bracket"></i></span>
                         <span>Logout</span>
                     </a>
                 </li>
@@ -119,7 +123,7 @@
                     <!-- Notification Bell Dropdown -->
                     <div class="notif-wrapper" style="position: relative;">
                         <button class="notif-bell-btn" id="notif-bell-btn">
-                            🔔
+                            <i class="fa-solid fa-bell"></i>
                             {% if unread_notifications_count > 0 %}
                                 <span class="notif-badge">
                                     {{ unread_notifications_count }}
@@ -173,6 +177,52 @@
     <div class="landing-body">
         {% block guest_content %}{% endblock %}
     </div>
+    {% endif %}
+
+    <!-- ==============================================
+         ASHA AI CHATBOT COMPONENT (Only for ASHA workers)
+         ============================================== -->
+    {% if session.get('role') == 'asha' %}
+    <!-- Floating Action Button -->
+    <button class="chatbot-fab" id="chatbot-fab" title="Chat with ASHA AI Assistant">
+        <i class="fa-solid fa-message"></i>
+    </button>
+
+    <!-- Chatbot Window -->
+    <div class="chatbot-window" id="chatbot-window">
+        <!-- Header -->
+        <div class="chatbot-header">
+            <div class="chatbot-header-info">
+                <div class="chatbot-avatar">
+                    <i class="fa-solid fa-robot"></i>
+                </div>
+                <div class="chatbot-title-group">
+                    <h4>ASHA AI Assistant</h4>
+                    <span class="chatbot-subtitle"><span class="status-dot"></span> Smart Healthcare Inventory Assistant</span>
+                </div>
+            </div>
+            <div class="chatbot-actions">
+                <button id="chatbot-clear-btn" title="Clear Chat History"><i class="fa-solid fa-trash-can"></i></button>
+                <button id="chatbot-close-btn"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+        </div>
+
+        <!-- Chat Messages Area -->
+        <div class="chatbot-messages" id="chatbot-messages">
+            <!-- Messages will be injected here via JS -->
+        </div>
+
+        <!-- Input Area -->
+        <div class="chatbot-input-area">
+            <input type="text" id="chatbot-input" placeholder="Ask about medicines, inventory or patients..." autocomplete="off">
+            <button id="chatbot-send-btn"><i class="fa-solid fa-paper-plane"></i></button>
+        </div>
+    </div>
+    
+    <!-- Dark Overlay for Mobile -->
+    <div class="chatbot-overlay" id="chatbot-overlay"></div>
+
+    <script src="{{ url_for('static', filename='js/chatbot.js') }}"></script>
     {% endif %}
 
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>

@@ -1024,3 +1024,66 @@ body {
     }
 }
 
+/* =========================================
+   ASHA WORKER TOUCH-FRIENDLY UX OVERHAUL
+========================================= */
+
+/* Make form inputs and selects larger for easy tapping */
+input.form-control, 
+select.form-control {
+    font-size: 1.1rem !important;
+    padding: 15px !important;
+    height: 55px !important;
+    border-radius: 8px !important;
+}
+
+/* Enlarge form labels */
+.form-group label {
+    font-size: 1.1rem !important;
+    font-weight: 600 !important;
+    margin-bottom: 8px !important;
+    color: var(--text-primary) !important;
+}
+
+/* Make primary submit buttons massive */
+.btn-primary[type="submit"] {
+    font-size: 1.2rem !important;
+    padding: 15px 30px !important;
+    border-radius: 12px !important;
+    width: 100% !important;
+    margin-top: 10px !important;
+    background-color: #2563eb !important;
+    font-weight: 700 !important;
+    box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2) !important;
+}
+
+/* Enlarge sidebar links but keep icons clean and small */
+.sidebar-link {
+    font-size: 1.15rem !important;
+    padding: 15px 20px !important;
+    margin-bottom: 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+}
+
+.sidebar-logo-icon {
+    font-size: 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* Header Notification Bell Sizing */
+.notif-bell-btn {
+    font-size: 8px !important;
+}
+
+/* Google Translate Footer Sizing */
+.goog-te-gadget-icon {
+    width: 8px !important;
+    height: 8px !important;
+}
+
+
+

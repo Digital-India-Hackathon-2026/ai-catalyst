@@ -4,6 +4,7 @@ from utils.db import init_db
 from routes.auth import auth_bp
 from routes.asha import asha_bp
 from routes.mandal import mandal_bp
+from routes.chatbot import chatbot_bp
 
 def create_app():
     # Set templates and static folder paths relative to this file
@@ -20,6 +21,7 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(asha_bp)
     app.register_blueprint(mandal_bp)
+    app.register_blueprint(chatbot_bp)
 
     from flask import session
     from utils.db import get_db_connection

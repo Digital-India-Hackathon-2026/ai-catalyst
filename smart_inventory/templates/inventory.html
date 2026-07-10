@@ -1,44 +1,42 @@
 {% extends 'base.html' %}
 
 {% block title %}Medicine Inventory - Smart Inventory System{% endblock %}
-{% block header_title %}Medicine Inventory Register{% endblock %}
+{% block header_title %}My Medicine Box{% endblock %}
 
 {% block content %}
 <div class="panel">
     <div class="panel-header">
-        <h3 class="panel-title">Active Stock Register</h3>
-        <a href="{{ url_for('asha.add_medicine') }}" class="btn btn-primary btn-sm">➕ Add New Medicine</a>
+        <h3 class="panel-title">Medicines I Have</h3>
+        <a href="{{ url_for('asha.add_medicine') }}" class="btn btn-primary btn-sm" style="font-size: 1.1rem; padding: 10px 20px;">➕ Add New Medicine</a>
     </div>
     
     <!-- Fast Live Search and Filter Bar -->
     <div class="filter-bar">
         <div class="search-box">
-            <input type="text" id="liveSearchInput" placeholder="Live search by name or batch..." value="">
+            <input type="text" id="liveSearchInput" placeholder="Live search by name..." value="" style="font-size: 1.1rem; padding: 12px;">
         </div>
         
-        <select id="liveCategoryFilter" class="filter-select">
+        <select id="liveCategoryFilter" class="filter-select" style="font-size: 1.1rem; padding: 12px;">
             <option value="">All Categories</option>
             {% for cat in categories %}
                 <option value="{{ cat }}">{{ cat }}</option>
             {% endfor %}
         </select>
         
-        <button id="resetFiltersBtn" class="btn btn-outline" style="padding: 10px 16px; font-size: 0.9rem;">Reset Filters</button>
+        <button id="resetFiltersBtn" class="btn btn-outline" style="padding: 12px 20px; font-size: 1.1rem;">Reset Filters</button>
     </div>
     
     <!-- Table Wrapper -->
     <div class="table-wrapper">
-        <table class="custom-table">
+        <table class="custom-table" style="font-size: 1.1rem;">
             <thead>
                 <tr>
-                    <th>Medicine Name</th>
-                    <th>Category</th>
-                    <th>Qty / Stock</th>
-                    <th>Batch</th>
-                    <th>Mfg / Expiry</th>
-                    <th>Status</th>
-                    <th>AI Restock 🧠</th>
-                    <th>Actions</th>
+                    <th style="padding: 15px;">Medicine Name</th>
+                    <th style="padding: 15px;">Category</th>
+                    <th style="padding: 15px;">I Have (Stock)</th>
+                    <th style="padding: 15px;">Status</th>
+                    <th style="padding: 15px;">System Suggests</th>
+                    <th style="padding: 15px;">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -48,35 +46,32 @@
                             data-name="{{ med.name|lower }}" 
                             data-batch="{{ med.batch_number|lower }}" 
                             data-category="{{ med.category|lower }}">
-                            <td style="font-weight: 600;">{{ med.name }}</td>
-                            <td>{{ med.category }}</td>
-                            <td>{{ med.quantity }} / {{ med.minimum_stock }} {{ med.unit }}</td>
-                            <td><code>{{ med.batch_number }}</code></td>
-                            <td style="font-size: 0.85rem;">
-                                <div style="color: var(--text-muted);">M: {{ med.mfg_date }}</div>
-                                <div>E: {{ med.expiry_date }}</div>
+                            <td style="font-weight: 600; padding: 15px;">{{ med.name }}</td>
+                            <td style="padding: 15px;">{{ med.category }}</td>
+                            <td style="padding: 15px;">
+                                <strong style="font-size: 1.2rem;">{{ med.quantity }}</strong> <span style="color: var(--text-muted);">{{ med.unit }}</span>
                             </td>
-                            <td>
+                            <td style="padding: 15px;">
                                 {% if med.status == 'Safe' %}
-                                    <span class="badge badge-available">Safe</span>
+                                    <span class="badge badge-available" style="font-size: 1rem; padding: 8px 12px;">Safe</span>
                                 {% elif med.status == 'Out of Stock' %}
-                                    <span class="badge badge-expired" style="background: #991b1b; color: white;">Out of Stock</span>
+                                    <span class="badge badge-expired" style="background: #991b1b; color: white; font-size: 1rem; padding: 8px 12px;">Empty</span>
                                 {% elif med.status == 'Low Stock' %}
-                                    <span class="badge badge-low">Low Stock</span>
+                                    <span class="badge badge-low" style="font-size: 1rem; padding: 8px 12px;">Running Out</span>
                                 {% elif med.status == 'Expiring Soon' %}
-                                    <span class="badge badge-expiring">Expiring Soon</span>
+                                    <span class="badge badge-expiring" style="font-size: 1rem; padding: 8px 12px;">Expiring Soon</span>
                                 {% else %}
-                                    <span class="badge badge-expired">Expired</span>
+                                    <span class="badge badge-expired" style="font-size: 1rem; padding: 8px 12px;">Expired</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td style="padding: 15px;">
                                 {% if med.recommended_restock > 0 %}
-                                    <span style="font-weight: bold; color: #4f46e5;">+{{ med.recommended_restock }}</span>
+                                    <span style="font-weight: bold; color: #4f46e5; font-size: 1.2rem;">Ask for +{{ med.recommended_restock }}</span>
                                 {% else %}
                                     <span style="color: var(--text-muted);">-</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td style="padding: 15px;">
                                 <div class="actions-cell">
                                     <!-- View Button -->
                                     <button class="btn-icon view-btn view-med-btn" title="View details"
@@ -110,8 +105,8 @@
                     {% endfor %}
                 {% else %}
                     <tr>
-                        <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 40px 10px;">
-                            No medicines found in your inventory register.
+                        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 40px 10px;">
+                            No medicines found in your medicine box.
                         </td>
                     </tr>
                 {% endif %}
@@ -120,7 +115,7 @@
     </div>
 </div>
 
-<!-- Modal: View Details -->
+<!-- Modal: View Details (Technical details kept here for reference) -->
 <div class="modal" id="view-details-modal">
     <div class="modal-card">
         <div class="modal-header">
@@ -128,7 +123,7 @@
             <button class="modal-close" style="background:none; border:none; font-size:1.5rem; cursor:pointer;">&times;</button>
         </div>
         <div class="modal-body" style="padding: 0;">
-            <table class="custom-table" style="font-size:0.9rem;">
+            <table class="custom-table" style="font-size:1.1rem;">
                 <tbody>
                     <tr>
                         <td style="font-weight:600; width:40%;">Medicine Name</td>
@@ -139,7 +134,7 @@
                         <td id="det-category"></td>
                     </tr>
                     <tr>
-                        <td style="font-weight:600;">Current Stock</td>
+                        <td style="font-weight:600;">I Have (Stock)</td>
                         <td id="det-quantity"></td>
                     </tr>
                     <tr>
@@ -155,18 +150,18 @@
                         <td id="det-expiry"></td>
                     </tr>
                     <tr>
-                        <td style="font-weight:600;">Minimum Stock Level</td>
+                        <td style="font-weight:600;">System Alert When Below</td>
                         <td id="det-min-stock"></td>
                     </tr>
                     <tr>
-                        <td style="font-weight:600;">System Status</td>
+                        <td style="font-weight:600;">Status</td>
                         <td><span id="det-status"></span></td>
                     </tr>
                 </tbody>
             </table>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-primary btn-close-modal">Close</button>
+            <button class="btn btn-primary btn-close-modal" style="font-size: 1.1rem; padding: 10px 20px;">Close</button>
         </div>
     </div>
 </div>
@@ -177,6 +172,11 @@
     }
     .critical-stock-row:hover {
         background-color: #fee2e2 !important;
+    }
+    /* Larger icons for ASHA workers */
+    .actions-cell .btn-icon {
+        font-size: 1.2rem;
+        padding: 8px;
     }
 </style>
 
