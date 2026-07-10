@@ -157,6 +157,7 @@
     flex-direction: column;
     max-width: 85%;
     animation: slideUpFade 0.3s ease forwards;
+    position: relative;
 }
 
 @keyframes slideUpFade {
@@ -200,6 +201,9 @@
     font-size: 0.7rem;
     color: #94a3b8;
     margin-top: 5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .chat-msg.bot .msg-time {
@@ -210,6 +214,26 @@
 .chat-msg.user .msg-time {
     align-self: flex-end;
     padding-right: 5px;
+}
+
+/* TTS Speaker Button */
+.msg-speaker-btn {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 0;
+    transition: color 0.2s;
+}
+
+.msg-speaker-btn:hover {
+    color: #2F4BA5;
+}
+
+.msg-speaker-btn.playing {
+    color: #2F4BA5;
+    animation: pulse 1.5s infinite;
 }
 
 /* Quick Action Chips */
@@ -302,6 +326,7 @@
     cursor: pointer;
     font-size: 16px;
     transition: background 0.2s, transform 0.2s;
+    flex-shrink: 0;
 }
 
 .chatbot-input-area button:hover {
@@ -317,6 +342,35 @@
     background: #94a3b8;
     cursor: not-allowed;
     transform: none;
+}
+
+/* Microphone Button Specifics */
+#chatbot-mic-btn {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+#chatbot-mic-btn:hover {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+#chatbot-mic-btn.recording {
+    background: #ef4444;
+    color: white;
+    animation: pulse-red 1.5s infinite;
+}
+
+@keyframes pulse-red {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
 }
 
 /* Dark overlay for mobile */
