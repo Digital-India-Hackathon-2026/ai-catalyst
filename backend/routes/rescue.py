@@ -729,3 +729,27 @@ def track_emergency(eid):
         return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
+
+
+@rescue_bp.route('/api/rescue/transcribe', methods=['POST'])
+def transcribe_speech():
+    """
+    Speech-to-text transcription endpoint using Deepgram.
+    Expects audio file in request.files['file'].
+    """
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    try:
+        from services.deepgram_service import transcribe_audio
+        audio_data = file.read()
+        content_type = file.content_type or 'audio/webm'
+        transcript = transcribe_audio(audio_data, content_type)
+        return jsonify({"transcript": transcript})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+

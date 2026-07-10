@@ -601,6 +601,97 @@ export function initSubmissionForm() {
   const form = document.getElementById('rescue-submit-form');
   if (!form) return;
 
+  // Speech-to-Text Recording Initialization
+  const recordBtn = document.getElementById('record-btn');
+  const recordIcon = document.getElementById('record-icon');
+  const recordText = document.getElementById('record-text');
+  const recordIndicator = document.getElementById('record-indicator');
+  const transcribeLoading = document.getElementById('transcribe-loading');
+  const descriptionTextarea = document.getElementById('description');
+
+  if (recordBtn && descriptionTextarea) {
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
+
+    recordBtn.addEventListener('click', async () => {
+      if (!isRecording) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream);
+          audioChunks = [];
+
+          mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              audioChunks.push(event.data);
+            }
+          };
+
+          mediaRecorder.onstop = async () => {
+            // Stop all tracks to release mic hardware
+            stream.getTracks().forEach(track => track.stop());
+
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            
+            if (transcribeLoading) transcribeLoading.style.display = 'inline-flex';
+            recordBtn.disabled = true;
+
+            try {
+              const formData = new FormData();
+              formData.append('file', audioBlob, 'recording.webm');
+
+              const res = await fetch('/api/rescue/transcribe', {
+                method: 'POST',
+                body: formData
+              });
+              
+              if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.error || 'Server error during transcription.');
+              }
+
+              const data = await res.json();
+              if (data.transcript) {
+                const currentText = descriptionTextarea.value.trim();
+                descriptionTextarea.value = currentText ? `${currentText} ${data.transcript}` : data.transcript;
+                showToast('Voice transcription added!', 'success');
+              } else {
+                showToast('No speech detected or empty transcription.', 'warning');
+              }
+            } catch (err) {
+              console.error(err);
+              showToast(`Transcription failed: ${err.message}`, 'error');
+            } finally {
+              if (transcribeLoading) transcribeLoading.style.display = 'none';
+              recordBtn.disabled = false;
+            }
+          };
+
+          mediaRecorder.start();
+          isRecording = true;
+          recordBtn.classList.add('recording-active');
+          if (recordIcon) recordIcon.textContent = '⏹';
+          if (recordText) recordText.textContent = 'Stop Recording';
+          if (recordIndicator) recordIndicator.style.display = 'inline-flex';
+          showToast('Recording started. Speak clearly...', 'info');
+
+        } catch (err) {
+          console.error(err);
+          showToast('Microphone access denied or not supported.', 'error');
+        }
+      } else {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+          mediaRecorder.stop();
+        }
+        isRecording = false;
+        recordBtn.classList.remove('recording-active');
+        if (recordIcon) recordIcon.textContent = '🎤';
+        if (recordText) recordText.textContent = 'Start Recording';
+        if (recordIndicator) recordIndicator.style.display = 'none';
+      }
+    });
+  }
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
 
