@@ -95,8 +95,9 @@ RESCUE_RULES = [
 
 def run_ai_analysis(description: str) -> dict:
     """
-    Rule-based AI engine to classify rescue emergencies.
-    Returns incident_type, severity, recommended_team, response_time_minutes, confidence_score, recommended_departments, nearest_rescue_team, and new Gemini fields.
+    Rule-based AI engine fallback.
+    Returns schema matching Gemini structure:
+    incident_type, severity, confidence_score, ai_summary, required_departments, possible_risks, suggested_rescue_actions, estimated_response_time, landmark, address.
     """
     text = description.lower()
     
@@ -106,29 +107,85 @@ def run_ai_analysis(description: str) -> dict:
                 return {
                     'incident_type': rule['incident_type'],
                     'severity': rule['severity'],
-                    'recommended_team': rule['team'],
-                    'response_time_minutes': rule['eta'],
                     'confidence_score': rule['confidence'],
-                    'recommended_departments': rule['departments'],
-                    'nearest_rescue_team': rule['nearest_team'],
-                    'ai_decision_summary': f"Emergency classified as {rule['incident_type']} ({rule['severity']} severity) based on matching keywords: {keyword}.",
-                    'possible_risks': f"Potential safety hazards, public danger, possible escalation if untreated.",
-                    'suggested_actions': f"Dispatch {rule['team']} immediately. Establish safety perimeter and evaluate victims."
+                    'ai_summary': f"Emergency classified as {rule['incident_type']} ({rule['severity']} severity) based on matching keywords: {keyword}.",
+                    'required_departments': [d.strip() for d in rule['departments'].split(',')] if rule.get('departments') else [],
+                    'possible_risks': ["Secondary hazards", "public safety danger", "escalation risk"],
+                    'suggested_rescue_actions': [f"Dispatch {rule['team']} immediately", "Establish safety perimeter", "Assess victims"],
+                    'estimated_response_time': rule['eta'],
+                    'landmark': rule['nearest_team'],
+                    'address': ""
                 }
     
     # Default fallback
     return {
         'incident_type': 'General Emergency',
         'severity': 'Low',
-        'recommended_team': 'Civic Emergency Team',
-        'response_time_minutes': 45,
         'confidence_score': 70,
-        'recommended_departments': 'Municipal Services',
-        'nearest_rescue_team': 'Local Patrol Squad',
-        'ai_decision_summary': "General emergency classification applied due to lack of specific keywords.",
-        'possible_risks': "General safety hazards, minor traffic obstruction.",
-        'suggested_actions': "Dispatch local patrol crew to investigate."
+        'ai_summary': "General emergency classification applied due to lack of specific keywords.",
+        'required_departments': ["Municipal Services"],
+        'possible_risks': ["General safety hazards", "minor traffic obstruction"],
+        'suggested_rescue_actions': ["Dispatch local patrol crew to investigate"],
+        'estimated_response_time': 45,
+        'landmark': "Local Patrol Area",
+        'address': ""
     }
+
+
+def determine_team_from_incident(incident_type: str, description: str) -> str:
+    """
+    Flask backend logic: decides the recommended_team based on incident type and description.
+    Do NOT allow Gemini to decide this.
+    """
+    inc_type_lower = str(incident_type).lower()
+    desc_lower = str(description).lower()
+    
+    if 'fire' in inc_type_lower or 'blaze' in inc_type_lower or 'burn' in inc_type_lower:
+        return 'Fire Response Unit'
+    elif 'flood' in inc_type_lower or 'drown' in inc_type_lower or 'water' in inc_type_lower:
+        return 'Flood Rescue (NDRF)'
+    elif 'collapse' in inc_type_lower or 'earthquake' in inc_type_lower or 'structural' in inc_type_lower:
+        return 'SDRF Structural Response Team'
+    elif 'hazmat' in inc_type_lower or 'chemical' in inc_type_lower or 'gas' in inc_type_lower or 'toxic' in inc_type_lower:
+        return 'Hazmat Response Unit'
+    elif 'accident' in inc_type_lower or 'crash' in inc_type_lower or 'medical' in inc_type_lower or 'injury' in inc_type_lower:
+        return 'Emergency Response Team'
+    elif 'electric' in inc_type_lower or 'power' in inc_type_lower or 'wire' in inc_type_lower:
+        return 'Electrical Emergency Unit'
+    elif 'tree' in inc_type_lower or 'debris' in inc_type_lower:
+        return 'Civic Emergency Team'
+        
+    # Fallback checks on description text
+    if 'fire' in desc_lower or 'blaze' in desc_lower:
+        return 'Fire Response Unit'
+    elif 'flood' in desc_lower or 'water' in desc_lower:
+        return 'Flood Rescue (NDRF)'
+    elif 'collapse' in desc_lower or 'rubble' in desc_lower:
+        return 'SDRF Structural Response Team'
+    elif 'gas' in desc_lower or 'chemical' in desc_lower:
+        return 'Hazmat Response Unit'
+    elif 'accident' in desc_lower or 'injury' in desc_lower:
+        return 'Emergency Response Team'
+    elif 'electric' in desc_lower or 'wire' in desc_lower:
+        return 'Electrical Emergency Unit'
+        
+    return 'Civic Emergency Team'
+
+
+def get_default_nearest_team(recommended_team: str) -> str:
+    """
+    Flask backend logic: decides the default nearest team mapping.
+    """
+    mapping = {
+        'Fire Response Unit': 'Ameerpet Fire Station Unit',
+        'Flood Rescue (NDRF)': 'Secunderabad NDRF Battalion',
+        'SDRF Structural Response Team': 'Jubilee Hills SDRF Team',
+        'Hazmat Response Unit': 'Gachibowli Hazmat Station',
+        'Emergency Response Team': 'Madhapur Patrol Unit',
+        'Electrical Emergency Unit': 'Begumpet Power Grid Response',
+        'Civic Emergency Team': 'Kondapur Municipal Crew'
+    }
+    return mapping.get(recommended_team, 'Kondapur Municipal Crew')
 
 
 SUB_UNITS = {
@@ -318,85 +375,82 @@ def team_missions(unit_label):
 def submit_emergency():
     """
     Submit a new emergency.
-    Runs AI analysis using Gemini (falls back to rule-based), applies decision policy, stores result.
+    Runs AI analysis using Gemini, saves raw JSON and individual columns,
+    and forces the Flask backend to handle all operational routing decisions.
     """
     data = request.json or {}
     description = (data.get('description') or '').strip()
     image_path   = data.get('image_path')   # base64 string (optional)
     lat          = data.get('lat')
     lng          = data.get('lng')
-    landmark     = (data.get('landmark') or '').strip()
+    citizen_landmark = (data.get('landmark') or '').strip()
 
     if not description:
         return jsonify({"error": "Emergency description is required."}), 400
 
-    # Try Gemini analysis
-    ai = None
+    # 1. Try Gemini analysis
+    gemini_raw_result = None
     try:
         from services.gemini_service import analyze_emergency_with_gemini
-        gemini_result = analyze_emergency_with_gemini(description, image_path)
-        if gemini_result and isinstance(gemini_result, dict):
-            severity = gemini_result.get('severity', 'Medium')
-            if severity not in ('Low', 'Medium', 'High', 'Critical'):
-                severity = 'Medium'
-                
-            valid_teams = [
-                'Fire Response Unit',
-                'Flood Rescue (NDRF)',
-                'SDRF Structural Response Team',
-                'Hazmat Response Unit',
-                'Emergency Response Team',
-                'Electrical Emergency Unit',
-                'Civic Emergency Team'
-            ]
-            rec_team = gemini_result.get('recommended_team')
-            if rec_team not in valid_teams:
-                rec_team_lower = str(rec_team).lower() if rec_team else ''
-                if 'fire' in rec_team_lower:
-                    rec_team = 'Fire Response Unit'
-                elif 'flood' in rec_team_lower or 'water' in rec_team_lower or 'ndrf' in rec_team_lower:
-                    rec_team = 'Flood Rescue (NDRF)'
-                elif 'sdrf' in rec_team_lower or 'collapse' in rec_team_lower or 'structural' in rec_team_lower:
-                    rec_team = 'SDRF Structural Response Team'
-                elif 'hazmat' in rec_team_lower or 'chemical' in rec_team_lower or 'gas' in rec_team_lower:
-                    rec_team = 'Hazmat Response Unit'
-                elif 'accident' in rec_team_lower or 'medical' in rec_team_lower or 'injury' in rec_team_lower:
-                    rec_team = 'Emergency Response Team'
-                elif 'electric' in rec_team_lower or 'power' in rec_team_lower:
-                    rec_team = 'Electrical Emergency Unit'
-                else:
-                    rec_team = 'Civic Emergency Team'
-
-            try:
-                eta = int(gemini_result.get('response_time_minutes', 15))
-            except:
-                eta = 15
-            try:
-                conf = int(gemini_result.get('confidence_score', 85))
-            except:
-                conf = 85
-
-            ai = {
-                'incident_type': gemini_result.get('incident_type', 'General Emergency'),
-                'severity': severity,
-                'recommended_team': rec_team,
-                'response_time_minutes': eta,
-                'confidence_score': conf,
-                'recommended_departments': gemini_result.get('recommended_departments', 'Disaster Management'),
-                'ai_decision_summary': gemini_result.get('ai_decision_summary', 'AI analyzed emergency report.'),
-                'possible_risks': gemini_result.get('possible_risks', 'Potential hazard at scene.'),
-                'suggested_actions': gemini_result.get('suggested_actions', 'Dispatch response team.'),
-                'nearest_rescue_team': gemini_result.get('nearest_rescue_team') or rec_team
-            }
+        gemini_raw_result = analyze_emergency_with_gemini(description, image_path)
     except Exception as gemini_err:
         print(f"[Rescue Route] Gemini execution/parsing error: {gemini_err}")
-        ai = None
+        gemini_raw_result = None
 
-    if not ai:
+    # Fallback to rules if Gemini fails or is unconfigured
+    if not gemini_raw_result or not isinstance(gemini_raw_result, dict):
         print("[Rescue Route] Falling back to rule-based classification.")
-        ai = run_ai_analysis(description)
+        gemini_raw_result = run_ai_analysis(description)
 
-    status = get_initial_status(ai['severity'])
+    # 2. Extract and Sanitize fields
+    incident_type = gemini_raw_result.get('incident_type', 'General Emergency')
+    severity = gemini_raw_result.get('severity', 'Medium')
+    if severity not in ('Low', 'Medium', 'High', 'Critical'):
+        severity = 'Medium'
+
+    try:
+        confidence = int(gemini_raw_result.get('confidence_score', 85))
+    except:
+        confidence = 85
+
+    try:
+        response_time = int(gemini_raw_result.get('estimated_response_time', 15))
+    except:
+        response_time = 15
+
+    ai_summary = gemini_raw_result.get('ai_summary', 'AI analyzed emergency report.')
+    
+    # Handle list types safely for SQL storage (join by comma)
+    req_depts = gemini_raw_result.get('required_departments')
+    if isinstance(req_depts, list):
+        depts_str = ', '.join(req_depts)
+    else:
+        depts_str = str(req_depts or 'Disaster Management')
+
+    risks = gemini_raw_result.get('possible_risks')
+    if isinstance(risks, list):
+        risks_str = ', '.join(risks)
+    else:
+        risks_str = str(risks or 'Potential hazard at scene.')
+
+    actions = gemini_raw_result.get('suggested_rescue_actions')
+    if isinstance(actions, list):
+        actions_str = ', '.join(actions)
+    else:
+        actions_str = str(actions or 'Dispatch response team.')
+
+    # Fallback landmark from Gemini if citizen did not enter one
+    ai_landmark = gemini_raw_result.get('landmark', '')
+    landmark = citizen_landmark if citizen_landmark else ai_landmark
+
+    # 3. Backend Operational Decisions: Assign team based on backend logic
+    recommended_team = determine_team_from_incident(incident_type, description)
+    default_nearest = get_default_nearest_team(recommended_team)
+
+    # Serialized full Gemini response
+    ai_analysis_json = json.dumps(gemini_raw_result)
+
+    status = get_initial_status(severity)
     now = datetime.now().isoformat()
 
     conn = get_db_connection()
@@ -405,10 +459,11 @@ def submit_emergency():
     try:
         emergency_id = generate_emergency_id(conn)
 
-        assigned_team_unit = ai['nearest_rescue_team']
-        if ai['severity'] == 'Critical':
+        # Smart assignment logic: least loaded for Critical, otherwise default nearest
+        assigned_team_unit = default_nearest
+        if severity == 'Critical':
             status = 'Team Assigned'
-            assigned_team_unit = get_least_loaded_unit(cursor, ai['recommended_team'])
+            assigned_team_unit = get_least_loaded_unit(cursor, recommended_team)
 
         cursor.execute("""
         INSERT INTO rescue_emergencies
@@ -416,23 +471,22 @@ def submit_emergency():
              incident_type, severity, recommended_team, response_time_minutes,
              confidence_score, status, submitted_at, updated_at,
              recommended_departments, nearest_rescue_team,
-             ai_decision_summary, possible_risks, suggested_actions)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ai_decision_summary, possible_risks, suggested_actions, ai_analysis_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             emergency_id, description, image_path, lat, lng, landmark,
-            ai['incident_type'], ai['severity'], ai['recommended_team'],
-            ai['response_time_minutes'], ai['confidence_score'],
-            status, now, now,
-            ai['recommended_departments'], assigned_team_unit,
-            ai['ai_decision_summary'], ai['possible_risks'], ai['suggested_actions']
+            incident_type, severity, recommended_team, response_time,
+            confidence, status, now, now,
+            depts_str, assigned_team_unit,
+            ai_summary, risks_str, actions_str, ai_analysis_json
         ))
 
         # Log the event
-        event_type = 'AUTO_ASSIGN' if ai['severity'] == 'Critical' else 'AI_ANALYSIS'
+        event_type = 'AUTO_ASSIGN' if severity == 'Critical' else 'AI_ANALYSIS'
         action_msg = (
             f"System auto-assigned Critical emergency directly to {assigned_team_unit} based on lowest workload."
-            if ai['severity'] == 'Critical'
-            else f"AI classified as {ai['severity']} severity {ai['incident_type']}. Status: {status}."
+            if severity == 'Critical'
+            else f"AI classified as {severity} severity {incident_type}. Status: {status}."
         )
         cursor.execute("""
         INSERT INTO rescue_audit_logs (emergency_id, event_type, action, actor, timestamp)
@@ -445,11 +499,11 @@ def submit_emergency():
             "message": "Emergency submitted successfully.",
             "emergency_id": emergency_id,
             "ai_result": {
-                "incident_type": ai['incident_type'],
-                "severity": ai['severity'],
-                "recommended_team": ai['recommended_team'],
-                "response_time_minutes": ai['response_time_minutes'],
-                "confidence_score": ai['confidence_score'],
+                "incident_type": incident_type,
+                "severity": severity,
+                "recommended_team": recommended_team,
+                "response_time_minutes": response_time,
+                "confidence_score": confidence,
                 "status": status
             }
         }), 201

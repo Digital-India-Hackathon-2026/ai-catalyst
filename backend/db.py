@@ -148,7 +148,8 @@ def init_db():
         nearest_rescue_team TEXT,
         ai_decision_summary TEXT,
         possible_risks TEXT,
-        suggested_actions TEXT
+        suggested_actions TEXT,
+        ai_analysis_json TEXT
     );
     """)
 
@@ -173,6 +174,10 @@ def init_db():
         cursor.execute("SELECT suggested_actions FROM rescue_emergencies LIMIT 1")
     except sqlite3.OperationalError:
         cursor.execute("ALTER TABLE rescue_emergencies ADD COLUMN suggested_actions TEXT")
+    try:
+        cursor.execute("SELECT ai_analysis_json FROM rescue_emergencies LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE rescue_emergencies ADD COLUMN ai_analysis_json TEXT")
 
 
     # 7. Rescue Audit Logs Table

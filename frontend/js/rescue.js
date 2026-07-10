@@ -1000,6 +1000,20 @@ export async function initTeamDashboard() {
       return;
     }
 
+    // Parse complete Gemini JSON response
+    let gemini = {};
+    try {
+      if (m.ai_analysis_json) {
+        gemini = JSON.parse(m.ai_analysis_json);
+      }
+    } catch (err) {
+      console.error("Error parsing ai_analysis_json in team dashboard:", err);
+    }
+
+    const aiSummary = gemini.ai_summary || m.ai_decision_summary || 'No summary available.';
+    const risks = Array.isArray(gemini.possible_risks) ? gemini.possible_risks.join(', ') : (m.possible_risks || 'No risks reported.');
+    const actions = Array.isArray(gemini.suggested_rescue_actions) ? gemini.suggested_rescue_actions.join(', ') : (m.suggested_actions || 'No suggested rescue actions.');
+
     const sev = m.severity.toLowerCase();
     
     const dispatchType = m.severity === 'Critical' ? 'Automatic Dispatch' : 'Manual Dispatch / Supervisor Approved';
@@ -1112,10 +1126,12 @@ export async function initTeamDashboard() {
             <span style="color:var(--rescue-primary); font-weight:700;">Confidence: ${m.confidence_score}%</span>
           </h4>
           <div style="display:flex; flex-direction:column; gap:0.5rem; color: var(--text-secondary);">
-            <span><strong>Priority / Severity:</strong> <span style="color:#ef4444; font-weight:700;">${m.severity}</span></span>
-            <span><strong>AI Decision Summary:</strong> ${m.ai_decision_summary || 'No summary available.'}</span>
-            <span><strong>Possible Risks at Scene:</strong> <span style="color:#fca5a5;">${m.possible_risks || 'No risks reported.'}</span></span>
-            <span><strong>Suggested Rescue Actions:</strong> <span style="color:#6ee7b7;">${m.suggested_actions || 'No suggested actions.'}</span></span>
+            <span><strong>Incident Type:</strong> <span>${m.incident_type}</span></span>
+            <span><strong>Severity:</strong> <span style="color:#ef4444; font-weight:700;">${m.severity}</span></span>
+            <span><strong>AI Summary:</strong> ${aiSummary}</span>
+            <span><strong>Possible Risks:</strong> <span style="color:#fca5a5;">${risks}</span></span>
+            <span><strong>Suggested Rescue Actions:</strong> <span style="color:#6ee7b7;">${actions}</span></span>
+            <span><strong>Estimated Response Time:</strong> <span>${m.response_time_minutes} minutes</span></span>
             <span><strong>Dispatch Type:</strong> ${dispatchType}</span>
           </div>
         </div>

@@ -15,18 +15,20 @@ def analyze_emergency_with_gemini(description: str, image_b64: str = None) -> di
 
     # Construct the prompt requesting structured JSON output
     system_instruction = (
-        "You are the GovConnect Rescue Dispatch AI. Analyze this emergency report to classify and recommend dispatch actions. "
+        "You are the GovConnect Rescue Dispatch AI. Analyze this emergency report to classify parameters and assess risk. "
+        "Do NOT assign or suggest a specific rescue team or unit name (e.g. Fire Unit 1, NDRF Unit A, etc.) - the system handles this operationally. "
         "You must return a JSON object with exactly the following fields (do not include markdown formatting or backticks around the JSON, just return raw JSON text):\n"
         "{\n"
-        "  \"incident_type\": \"Type of emergency (e.g. Fire Emergency, Road Accident, Flood / Water Rescue, Hazardous Material Incident, Electrical Emergency, Fallen Tree / Debris, etc.)\",\n"
-        "  \"severity\": \"Must be exactly one of: 'Critical', 'High', 'Medium', 'Low'\",\n"
-        "  \"ai_decision_summary\": \"A clear, professional summary of the situation and reasoning for the classification\",\n"
-        "  \"recommended_team\": \"Must be exactly one of: 'Fire Response Unit', 'Flood Rescue (NDRF)', 'SDRF Structural Response Team', 'Hazmat Response Unit', 'Emergency Response Team', 'Electrical Emergency Unit', 'Civic Emergency Team'\",\n"
-        "  \"recommended_departments\": \"Comma-separated list of departments involved (e.g. 'Fire Services, Disaster Management, Health Dept')\",\n"
-        "  \"possible_risks\": \"A comma-separated list of potential hazards at the scene\",\n"
-        "  \"suggested_actions\": \"Immediate steps/actions that the rescue team should take\",\n"
-        "  \"response_time_minutes\": Estimated time in minutes for team to arrive (an integer),\n"
-        "  \"confidence_score\": Confidence level between 0 and 100 (an integer)\n"
+        "  \"incident_type\": \"Type of emergency (e.g. Fire Emergency, Road Accident, Flood / Water Rescue, Hazardous Material Incident, Electrical Emergency, Fallen Tree / Debris, etc.) (string)\",\n"
+        "  \"severity\": \"Must be exactly one of: 'Critical', 'High', 'Medium', 'Low' (string)\",\n"
+        "  \"confidence_score\": \"Confidence level between 0 and 100 as an integer or string\",\n"
+        "  \"ai_summary\": \"A clear, professional summary of the situation and reasoning for the classification (string)\",\n"
+        "  \"required_departments\": [\"List of required departments involved as strings (e.g. ['Fire Services', 'Disaster Management'])\"],\n"
+        "  \"possible_risks\": [\"List of potential hazards at the scene as strings (e.g. ['toxic fumes', 'structural collapse'])\"],\n"
+        "  \"suggested_rescue_actions\": [\"List of immediate actions for rescue crew as strings (e.g. ['evacuate area', 'administer first aid'])\"],\n"
+        "  \"estimated_response_time\": \"Estimated response/dispatch preparation time in minutes as integer or string (e.g. 10)\",\n"
+        "  \"landmark\": \"Any notable landmark identified from context/image if present (string)\",\n"
+        "  \"address\": \"Any address details identified from context/image if present (string)\"\n"
         "}"
     )
 
