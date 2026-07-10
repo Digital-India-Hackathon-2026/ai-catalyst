@@ -1548,17 +1548,16 @@ function renderEmergencies(root, data) {
 
 function buildEmergencyCard(e) {
   const sevClass = e.severity.toLowerCase();
+  const destQuery = (e.lat && e.lng) ? `${e.lat},${e.lng}` : encodeURIComponent(e.landmark || e.description || '');
 
   let actionsHTML = '';
   if (e.status === 'Case Closed') {
     actionsHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
         <div>${statusBadge(e.status)}</div>
-        ${e.lat && e.lng ? `
-          <a href="https://www.google.com/maps/dir/?api=1&destination=${e.lat},${e.lng}" target="_blank" class="team-btn btn-secondary" style="font-size:0.72rem; padding:0.25rem 0.60rem; display:inline-flex; align-items:center; gap:0.2rem; text-decoration:none; border-radius:4px; font-weight:600; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:var(--text-secondary);">
-            🚗 Navigate to Scene
-          </a>
-        ` : ''}
+        <a href="https://www.google.com/maps/dir/?api=1&destination=${destQuery}" target="_blank" class="team-btn btn-secondary" style="font-size:0.72rem; padding:0.25rem 0.60rem; display:inline-flex; align-items:center; gap:0.2rem; text-decoration:none; border-radius:4px; font-weight:600; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:var(--text-secondary);">
+          🚗 Navigate to Scene
+        </a>
       </div>
     `;
   } else {
@@ -1594,11 +1593,9 @@ function buildEmergencyCard(e) {
       <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;width:100%;">
         <div style="display:flex;gap:0.5rem;align-items:center;">
           ${buttonsHTML}
-          ${e.lat && e.lng ? `
-            <a href="https://www.google.com/maps/dir/?api=1&destination=${e.lat},${e.lng}" target="_blank" class="team-btn" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8); border:none; text-decoration:none; color:#ffffff; font-size:0.72rem; padding:0.35rem 0.65rem; border-radius:4px; font-weight:600; display:inline-flex; align-items:center; gap:0.2rem;">
-              🚗 Navigate to Scene
-            </a>
-          ` : ''}
+          <a href="https://www.google.com/maps/dir/?api=1&destination=${destQuery}" target="_blank" class="team-btn" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8); border:none; text-decoration:none; color:#ffffff; font-size:0.72rem; padding:0.35rem 0.65rem; border-radius:4px; font-weight:600; display:inline-flex; align-items:center; gap:0.2rem;">
+            🚗 Navigate to Scene
+          </a>
         </div>
         <div style="display:flex;align-items:center;gap:0.5rem;">
           <span style="font-size:0.75rem;color:var(--text-muted);">Status:</span>
