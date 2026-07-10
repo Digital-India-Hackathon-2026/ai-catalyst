@@ -31,7 +31,17 @@ export const TEAM_BASES = {
   'EE Unit A':                      { lat: 17.4447, lng: 78.4664, name: 'Begumpet Power Grid Base', icon: '🚐' },
   'EE Unit B':                      { lat: 17.4699, lng: 78.3678, name: 'Kondapur Power Grid Base', icon: '🚐' },
   'Civic Crew 1':                   { lat: 17.4699, lng: 78.3678, name: 'Kondapur Municipal Base', icon: '🚛' },
-  'Civic Crew 2':                   { lat: 17.4265, lng: 78.4124, name: 'Jubilee Hills Municipal Base', icon: '🚛' }
+  'Civic Crew 2':                   { lat: 17.4265, lng: 78.4124, name: 'Jubilee Hills Municipal Base', icon: '🚛' },
+
+  // Default Seeded nearest_rescue_team names in DB
+  'Ameerpet Fire Station Unit':     { lat: 17.4374, lng: 78.4482, name: 'Ameerpet Fire Station Unit', icon: '🚒' },
+  'Secunderabad NDRF Battalion':    { lat: 17.4399, lng: 78.5020, name: 'Secunderabad NDRF Battalion', icon: '🚤' },
+  'Jubilee Hills SDRF Team':        { lat: 17.4265, lng: 78.4124, name: 'Jubilee Hills SDRF Team', icon: '🚜' },
+  'Hills SDRF Response Team':       { lat: 17.4265, lng: 78.4124, name: 'Jubilee Hills SDRF Team', icon: '🚜' },
+  'Gachibowli Hazmat Station':      { lat: 17.4483, lng: 78.3741, name: 'Gachibowli Hazmat Station', icon: '🚐' },
+  'Madhapur Patrol Unit':           { lat: 17.4486, lng: 78.3908, name: 'Madhapur Patrol Unit', icon: '🚑' },
+  'Begumpet Power Grid Response':   { lat: 17.4447, lng: 78.4664, name: 'Begumpet Power Grid Response', icon: '🚐' },
+  'Kondapur Municipal Crew':        { lat: 17.4699, lng: 78.3678, name: 'Kondapur Municipal Crew', icon: '🚛' }
 };
 
 
