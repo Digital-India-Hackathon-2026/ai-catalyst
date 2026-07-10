@@ -699,10 +699,17 @@ async function loadAdminDashboard() {
       </div>
       <div class="glass-card analytics-card warning">
         <div class="info">
-          <h5>Pending</h5>
+          <h5>Pending Review</h5>
           <div class="value">${data.pending_complaints}</div>
         </div>
         <div class="icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+      </div>
+      <div class="glass-card analytics-card normal">
+        <div class="info">
+          <h5>Assigned Tasks</h5>
+          <div class="value">${data.assigned_complaints}</div>
+        </div>
+        <div class="icon"><i class="fa-solid fa-user-check"></i></div>
       </div>
       <div class="glass-card analytics-card normal">
         <div class="info">
@@ -714,23 +721,58 @@ async function loadAdminDashboard() {
       <div class="glass-card analytics-card success">
         <div class="info">
           <h5>Resolved</h5>
-          <div class="value">${data.resolved + data.closed}</div>
+          <div class="value">${data.resolved}</div>
         </div>
         <div class="icon"><i class="fa-solid fa-circle-check"></i></div>
       </div>
+      <div class="glass-card analytics-card success">
+        <div class="info">
+          <h5>Closed</h5>
+          <div class="value">${data.closed}</div>
+        </div>
+        <div class="icon"><i class="fa-solid fa-box-archive"></i></div>
+      </div>
+      <div class="glass-card analytics-card normal">
+        <div class="info">
+          <h5>Today's Received</h5>
+          <div class="value">${data.today_complaints}</div>
+        </div>
+        <div class="icon"><i class="fa-solid fa-calendar-day"></i></div>
+      </div>
+      <div class="glass-card analytics-card warning">
+        <div class="info">
+          <h5>High Priority</h5>
+          <div class="value">${data.high_priority_complaints}</div>
+        </div>
+        <div class="icon"><i class="fa-solid fa-hourglass-half"></i></div>
+      </div>
       <div class="glass-card analytics-card danger">
         <div class="info">
-          <h5>Emergency (SLA Risk)</h5>
+          <h5>Emergency Tasks</h5>
           <div class="value">${data.emergency_complaints}</div>
         </div>
         <div class="icon"><i class="fa-solid fa-bell"></i></div>
       </div>
       <div class="glass-card analytics-card success">
         <div class="info">
-          <h5>Active Officers</h5>
+          <h5>Available Officers</h5>
           <div class="value">${data.employee_availability}</div>
         </div>
         <div class="icon"><i class="fa-solid fa-users-gear"></i></div>
+      </div>
+      <div class="glass-card analytics-card normal">
+        <div class="info">
+          <h5>Avg Resolution Time</h5>
+          <div class="value">${data.average_resolution_time}</div>
+        </div>
+        <div class="icon"><i class="fa-solid fa-stopwatch"></i></div>
+      </div>
+      <div class="glass-card analytics-card danger">
+        <div class="info">
+          <h5>SLA Violations</h5>
+          <div class="value">${data.sla_violations}</div>
+        </div>
+        <div class="icon"><i class="fa-solid fa-skull-crossbones"></i></div>
       </div>
     `;
     
