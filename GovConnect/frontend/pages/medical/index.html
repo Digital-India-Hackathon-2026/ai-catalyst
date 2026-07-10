@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Medical Emergency – GovConnect</title>
+  <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body>
+
+  <!-- Shared Navbar Injection -->
+  <div id="navbar-placeholder"></div>
+
+  <!-- Module Page Body -->
+  <main class="container">
+    
+    <!-- Module Header -->
+    <section class="module-header">
+      <a href="../../index.html" class="back-link">&larr; Back to Portal</a>
+      <div class="module-title-row">
+        <h2>Medical Emergency</h2>
+        <span class="module-badge medical">EMS & Ambulance</span>
+      </div>
+      <p style="color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.5rem;">
+        Cardiac care alerts, trauma accidents, ambulance dispatches, and emergency hospital bed allocation.
+      </p>
+    </section>
+
+    <!-- Under Development Card with API Status -->
+    <section class="glass-card under-dev-card">
+      <div class="under-dev-icon">❤️</div>
+      <h3>Module Under Development</h3>
+      <p style="color: var(--text-secondary); max-width: 500px;">
+        Teammate 3 is working on the Medical module in branch <code style="color: var(--color-medical);">feature/medical-module</code>. Ambulance routing map and ER triage systems will be merged in Phase 2.
+      </p>
+      
+      <!-- Spinner -->
+      <div id="spinner-container-medical">
+        <!-- Will show spinner, then fade when API responds -->
+      </div>
+
+      <!-- Live API Status Card -->
+      <div class="api-widget">
+        <div class="api-widget-header">
+          <span>GET /api/medical</span>
+          <span id="api-status-dot" class="api-widget-status"></span>
+        </div>
+        <pre id="api-response-data" class="api-widget-body">Querying local Flask API server...</pre>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Shared Footer Injection -->
+  <div id="footer-placeholder"></div>
+
+  <!-- Scripts -->
+  <script src="../../components/navbar.js"></script>
+  <script src="../../components/footer.js"></script>
+  
+  <script type="module">
+    import { fetchFromAPI } from "../../js/main.js";
+    import { getSpinnerHTML } from "../../components/spinner.js";
+
+    // Setup initial loading spinner
+    const spinnerBox = document.getElementById("spinner-container-medical");
+    spinnerBox.innerHTML = getSpinnerHTML("Querying backend for Medical configurations...");
+
+    // Query local backend API
+    async function loadMedicalAPI() {
+      const data = await fetchFromAPI("/api/medical");
+      
+      // Update UI
+      spinnerBox.innerHTML = `<span style="font-size: 0.85rem; color: var(--color-medical); font-weight: 500;">✓ Connected to Flask Backend Blueprint</span>`;
+      
+      const statusDot = document.getElementById("api-status-dot");
+      statusDot.className = "api-widget-status success";
+      
+      const responseDataBox = document.getElementById("api-response-data");
+      responseDataBox.textContent = JSON.stringify(data, null, 4);
+    }
+
+    loadMedicalAPI();
+  </script>
+
+</body>
+</html>
