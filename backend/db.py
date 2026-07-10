@@ -145,7 +145,10 @@ def init_db():
         submitted_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         recommended_departments TEXT,
-        nearest_rescue_team TEXT
+        nearest_rescue_team TEXT,
+        ai_decision_summary TEXT,
+        possible_risks TEXT,
+        suggested_actions TEXT
     );
     """)
 
@@ -158,6 +161,18 @@ def init_db():
         cursor.execute("SELECT nearest_rescue_team FROM rescue_emergencies LIMIT 1")
     except sqlite3.OperationalError:
         cursor.execute("ALTER TABLE rescue_emergencies ADD COLUMN nearest_rescue_team TEXT")
+    try:
+        cursor.execute("SELECT ai_decision_summary FROM rescue_emergencies LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE rescue_emergencies ADD COLUMN ai_decision_summary TEXT")
+    try:
+        cursor.execute("SELECT possible_risks FROM rescue_emergencies LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE rescue_emergencies ADD COLUMN possible_risks TEXT")
+    try:
+        cursor.execute("SELECT suggested_actions FROM rescue_emergencies LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE rescue_emergencies ADD COLUMN suggested_actions TEXT")
 
 
     # 7. Rescue Audit Logs Table
@@ -304,8 +319,8 @@ def init_db():
         INSERT INTO rescue_emergencies
             (emergency_id, description, lat, lng, landmark, incident_type, severity,
              recommended_team, response_time_minutes, confidence_score, status, submitted_at, updated_at,
-             recommended_departments, nearest_rescue_team)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             recommended_departments, nearest_rescue_team, ai_decision_summary, possible_risks, suggested_actions)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             'RES-0001',
             'Massive fire broke out in a multi-storey apartment building near Ameerpet X Road. Multiple families trapped on upper floors. Smoke visible from 2 km away.',
@@ -314,7 +329,10 @@ def init_db():
             'Fire Response Unit', 8, 96,
             'Auto Dispatched',
             seed_yesterday.isoformat(), seed_yesterday.isoformat(),
-            'Fire Services, Disaster Management, Health Dept', 'Ameerpet Fire Station Unit'
+            'Fire Services, Disaster Management, Health Dept', 'Ameerpet Fire Station Unit',
+            'Active building fire with multiple trapped civilians, classified as Critical due to immediate threat to life.',
+            'Smoke inhalation, structural collapse, fire spreading to adjacent structures, toxic fumes.',
+            'Deploy structural fire engines immediately, initiate search and rescue on upper floors, establish triage area, evacuate adjacent buildings.'
         ))
         cursor.execute("""
         INSERT INTO rescue_audit_logs (emergency_id, event_type, action, actor, timestamp)
@@ -326,8 +344,8 @@ def init_db():
         INSERT INTO rescue_emergencies
             (emergency_id, description, lat, lng, landmark, incident_type, severity,
              recommended_team, response_time_minutes, confidence_score, status, submitted_at, updated_at,
-             recommended_departments, nearest_rescue_team)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             recommended_departments, nearest_rescue_team, ai_decision_summary, possible_risks, suggested_actions)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             'RES-0002',
             'Severe road accident on Outer Ring Road near Gachibowli. Two vehicles overturned, 4 people injured, one person still trapped inside a car.',
@@ -336,7 +354,10 @@ def init_db():
             'Emergency Response Team', 15, 88,
             'Pending Supervisor Approval',
             seed_two_hours.isoformat(), seed_two_hours.isoformat(),
-            'Police Department, Health Department (108)', 'Madhapur Patrol Unit'
+            'Police Department, Health Department (108)', 'Madhapur Patrol Unit',
+            'High-speed highway collision resulting in injuries and entrapment, classified as High due to active medical emergency.',
+            'Traumatic injuries, fuel leak leading to post-crash fire, oncoming highway traffic hazard.',
+            'Secure the crash site, use hydraulic rescue tools for extrication, administer advanced trauma care, manage highway traffic diversion.'
         ))
         cursor.execute("""
         INSERT INTO rescue_audit_logs (emergency_id, event_type, action, actor, timestamp)
@@ -348,8 +369,8 @@ def init_db():
         INSERT INTO rescue_emergencies
             (emergency_id, description, lat, lng, landmark, incident_type, severity,
              recommended_team, response_time_minutes, confidence_score, status, submitted_at, updated_at,
-             recommended_departments, nearest_rescue_team)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             recommended_departments, nearest_rescue_team, ai_decision_summary, possible_risks, suggested_actions)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             'RES-0003',
             'A tree has fallen on the road near Jubilee Hills Road No. 36 due to last night winds. It is partially blocking traffic but no injuries reported.',
@@ -358,7 +379,10 @@ def init_db():
             'Civic Emergency Team', 45, 78,
             'Pending Review',
             seed_now.isoformat(), seed_now.isoformat(),
-            'Forest Department, Municipal Corp (GHMC)', 'Kondapur Municipal Crew'
+            'Forest Department, Municipal Corp (GHMC)', 'Kondapur Municipal Crew',
+            'Fallen tree partially blocking suburban road with no injuries or damage to property, classified as Low.',
+            'Minor traffic congestion, potential damage to overhead electric lines.',
+            'Coordinate with GHMC forest crew, chop and remove tree logs, clear road debris for smooth traffic flow.'
         ))
         cursor.execute("""
         INSERT INTO rescue_audit_logs (emergency_id, event_type, action, actor, timestamp)

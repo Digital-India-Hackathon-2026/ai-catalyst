@@ -291,7 +291,36 @@ function renderResultPage(e, root) {
           </div>
         </div>
 
-        <div class="result-status-banner ${statusBannerClass}">
+        <!-- Gemini AI Detailed Diagnosis -->
+        <div style="margin-top:1.5rem; border-top:1px solid rgba(255,255,255,0.08); padding-top:1rem;">
+          <h4 style="font-size:0.9rem; font-weight:700; color:var(--rescue-primary); margin-bottom:0.75rem; display:flex; align-items:center; gap:0.5rem;">
+            🧠 Gemini AI Detailed Analysis
+          </h4>
+          <div style="display:flex; flex-direction:column; gap:0.75rem; font-size:0.85rem; line-height:1.5; color:var(--text-secondary);">
+            <div>
+              <strong style="color:var(--text-primary); display:block; margin-bottom:0.25rem;">📝 Decision Summary:</strong>
+              <span style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:0.5rem; border-radius:6px; display:block;">
+                ${e.ai_decision_summary || 'No summary available.'}
+              </span>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:0.25rem;">
+              <div>
+                <strong style="color:var(--text-primary); display:block; margin-bottom:0.25rem;">⚠️ Possible Risks:</strong>
+                <span style="background:rgba(239,68,68,0.05); border:1px solid rgba(239,68,68,0.15); color:#fca5a5; padding:0.5rem 0.6rem; border-radius:6px; display:block; min-height:60px;">
+                  ${e.possible_risks || 'No immediate risks identified.'}
+                </span>
+              </div>
+              <div>
+                <strong style="color:var(--text-primary); display:block; margin-bottom:0.25rem;">🚒 Suggested Actions:</strong>
+                <span style="background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.15); color:#6ee7b7; padding:0.5rem 0.6rem; border-radius:6px; display:block; min-height:60px;">
+                  ${e.suggested_actions || 'No suggested actions available.'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="result-status-banner ${statusBannerClass}" style="margin-top:1.5rem;">
           <span>${statusIcon}</span>
           <span>${e.status}</span>
         </div>
@@ -314,7 +343,7 @@ function renderResultPage(e, root) {
             </svg>
             <div class="confidence-ring-label" style="color:${strokeColor};">${e.confidence_score}%</div>
           </div>
-          <p style="font-size:0.78rem;color:var(--text-secondary);">Rule-based AI classification confidence</p>
+          <p style="font-size:0.78rem;color:var(--text-secondary);">Gemini AI classification confidence</p>
         </div>
 
         <!-- Decision summary -->
@@ -632,6 +661,25 @@ function buildEmergencyCard(e) {
         <span class="ec-meta-item">🎯 ${e.confidence_score}% confidence</span>
         ${e.landmark ? `<span class="ec-meta-item">📍 ${e.landmark}</span>` : ''}
       </div>
+
+      <!-- Gemini AI Diagnostics -->
+      <div style="margin-top:0.75rem; border-top:1px dashed rgba(255,255,255,0.06); padding-top:0.75rem; font-size:0.78rem; color:var(--text-secondary);">
+        <div style="margin-bottom:0.4rem;">
+          <span style="color:var(--rescue-primary); font-weight:700;">🧠 AI Decision Summary:</span> 
+          <span>${e.ai_decision_summary || 'No summary available.'}</span>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-top:0.4rem;">
+          <div style="background:rgba(239,68,68,0.03); border:1px solid rgba(239,68,68,0.08); padding:0.4rem; border-radius:4px;">
+            <span style="color:#fca5a5; font-weight:700; display:block; margin-bottom:0.15rem;">⚠️ Potential Risks:</span>
+            <span>${e.possible_risks || 'No immediate risks identified.'}</span>
+          </div>
+          <div style="background:rgba(16,185,129,0.03); border:1px solid rgba(16,185,129,0.08); padding:0.4rem; border-radius:4px;">
+            <span style="color:#6ee7b7; font-weight:700; display:block; margin-bottom:0.15rem;">🚒 Suggested Actions:</span>
+            <span>${e.suggested_actions || 'No suggested actions.'}</span>
+          </div>
+        </div>
+      </div>
+
       ${rosterHTML}
       <div class="ec-actions">${actionsHTML}</div>
     </div>
@@ -1060,13 +1108,15 @@ export async function initTeamDashboard() {
 
         <div style="background: rgba(245, 158, 11, 0.04); border: 1px solid rgba(245, 158, 11, 0.15); border-radius: 8px; padding: 0.85rem; font-size: 0.82rem;">
           <h4 style="color: var(--rescue-primary); margin:0 0 0.5rem 0; font-size:0.88rem; font-weight:700; display:flex; justify-content:space-between;">
-            <span>🤖 AI Dispatch Summary</span>
+            <span>🧠 Gemini AI Dispatch Diagnostics</span>
             <span style="color:var(--rescue-primary); font-weight:700;">Confidence: ${m.confidence_score}%</span>
           </h4>
-          <div style="display:flex; flex-direction:column; gap:0.35rem; color: var(--text-secondary);">
-            <span><strong>Priority:</strong> ${m.severity}</span>
+          <div style="display:flex; flex-direction:column; gap:0.5rem; color: var(--text-secondary);">
+            <span><strong>Priority / Severity:</strong> <span style="color:#ef4444; font-weight:700;">${m.severity}</span></span>
+            <span><strong>AI Decision Summary:</strong> ${m.ai_decision_summary || 'No summary available.'}</span>
+            <span><strong>Possible Risks at Scene:</strong> <span style="color:#fca5a5;">${m.possible_risks || 'No risks reported.'}</span></span>
+            <span><strong>Suggested Rescue Actions:</strong> <span style="color:#6ee7b7;">${m.suggested_actions || 'No suggested actions.'}</span></span>
             <span><strong>Dispatch Type:</strong> ${dispatchType}</span>
-            <span><strong>Assignment Reason:</strong> Keyword check matched incident type context "${m.incident_type}".</span>
           </div>
         </div>
 
