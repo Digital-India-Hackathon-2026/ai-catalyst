@@ -22,7 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <li><a href="${basePath}index.html" class="nav-link" id="nav-home">Home</a></li>
           <li><a href="${basePath}${pagePath}civic/index.html" class="nav-link" id="nav-civic">Civic Issues</a></li>
           <li><a href="${basePath}${pagePath}rescue/index.html" class="nav-link" id="nav-rescue">Rescue Services</a></li>
-          <li><a href="${basePath}${pagePath}medical/index.html" class="nav-link" id="nav-medical">Medical Emergency</a></li>
+          <li><a href="http://127.0.0.1:8000/" class="nav-link" id="nav-medical">Medical Emergency</a></li>
         </ul>
       </div>
     </nav>

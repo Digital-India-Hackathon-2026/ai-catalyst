@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+
+{% block title %}ASHA Dashboard - Smart Inventory System{% endblock %}
+{% block header_title %}ASHA Worker Dashboard{% endblock %}
+
+{% block content %}
+<!-- Alerts Section -->
+{% if alerts %}
+<div class="alerts-container">
+    {% for alert in alerts %}
+        <div class="alert-item {{ alert.type }}">
+            <span class="alert-icon">⚠️</span>
+            <span>{{ alert.message }}</span>
+        </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Dashboard Cards -->
+<div class="metrics-grid">
+    <!-- Card 1: Total Medicines -->
+    <div class="metric-card">
+        <div class="metric-info">
+            <h4>Total Medicines</h4>
+            <div class="metric-value">{{ total_medicines }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--primary);">💊</div>
+    </div>
+    
+    <!-- Card 2: Available Stock -->
+    <div class="metric-card success">
+        <div class="metric-info">
+            <h4>Available Stock</h4>
+            <div class="metric-value">{{ available_stock }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--color-available);">📦</div>
+    </div>
+    
+    <!-- Card 3: Low Stock Medicines -->
+    <div class="metric-card warning">
+        <div class="metric-info">
+            <h4>Low Stock</h4>
+            <div class="metric-value">{{ low_stock_count }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--color-low);">⚠️</div>
+    </div>
+    
+    <!-- Card 4: Expired Medicines -->
+    <div class="metric-card danger">
+        <div class="metric-info">
+            <h4>Expired Items</h4>
+            <div class="metric-value">{{ expired_count }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--color-expired);">❌</div>
+    </div>
+    
+    <!-- Card 5: Medicines Expiring Soon -->
+    <div class="metric-card info">
+        <div class="metric-info">
+            <h4>Expiring Soon</h4>
+            <div class="metric-value">{{ expiring_soon_count }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--color-expiring);">⏳</div>
+    </div>
+    
+    <!-- Card 6: Medicines Distributed Today -->
+    <div class="metric-card success">
+        <div class="metric-info">
+            <h4>Distributed Today</h4>
+            <div class="metric-value">{{ distributed_today }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--secondary-light);">🤝</div>
+    </div>
+</div>
+
+<!-- Welcome Panel -->
+<div class="panel">
+    <h3 class="panel-title" style="margin-bottom: 12px; color: var(--primary);">Welcome to your Digital Register</h3>
+    <p style="color: var(--text-muted); line-height: 1.6; font-size: 0.95rem;">
+        This portal replaces the manual paper register. You can check the current medicine levels, add new stock shipments from the Mandal warehouse, record medicines distributed to local village beneficiaries, and track inventory movements. Use the sidebar navigation on the left to start.
+    </p>
+    
+    <div class="btn-group" style="margin-top: 20px;">
+        <a href="{{ url_for('asha.inventory') }}" class="btn btn-primary">View Inventory</a>
+        <a href="{{ url_for('asha.distribution') }}" class="btn btn-secondary">Distribute Stock</a>
+    </div>
+</div>
+{% endblock %}

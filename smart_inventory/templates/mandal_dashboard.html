@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+
+{% block title %}Mandal Hospital Dashboard - Smart Inventory System{% endblock %}
+{% block header_title %}Mandal Hospital Overview Dashboard{% endblock %}
+
+{% block content %}
+<!-- Dashboard Cards -->
+<div class="metrics-grid">
+    <!-- Card 1: Total Villages -->
+    <div class="metric-card">
+        <div class="metric-info">
+            <h4>Total Villages</h4>
+            <div class="metric-value">{{ total_villages }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--primary);">🏡</div>
+    </div>
+    
+    <!-- Card 2: Total Medicines -->
+    <div class="metric-card info">
+        <div class="metric-info">
+            <h4>Global Stock Qty</h4>
+            <div class="metric-value">{{ total_medicines }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--secondary-light);">📦</div>
+    </div>
+    
+    <!-- Card 3: Low Stock Cases -->
+    <div class="metric-card warning">
+        <div class="metric-info">
+            <h4>Low Stock Cases</h4>
+            <div class="metric-value">{{ low_stock_cases }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--color-low);">⚠️</div>
+    </div>
+    
+    <!-- Card 4: Expired Medicines -->
+    <div class="metric-card danger">
+        <div class="metric-info">
+            <h4>Expired Medicines</h4>
+            <div class="metric-value">{{ expired_medicines }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--color-expired);">❌</div>
+    </div>
+</div>
+
+<!-- Village Report Table -->
+<div class="panel">
+    <div class="panel-header">
+        <h3 class="panel-title">Village-wise Medicine Inventory Tracking</h3>
+        <span style="font-size: 0.85rem; color: var(--text-muted);">Click "Open Register" to audit village stock levels</span>
+    </div>
+    
+    <div class="table-wrapper">
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>Village Name</th>
+                    <th>Assigned ASHA Worker</th>
+                    <th>Total Unique Products</th>
+                    <th>Low Stock Products</th>
+                    <th>Expired Products</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if village_reports %}
+                    {% for report in village_reports %}
+                        <tr>
+                            <td style="font-weight: 600; font-size: 1.05rem;">
+                                🏡 {{ report.village }}
+                            </td>
+                            <td>{{ report.asha_worker }}</td>
+                            <td>{{ report.total_medicines }} medicines</td>
+                            <td>
+                                {% if report.low_stock_items > 0 %}
+                                    <span style="color: var(--color-low); font-weight: 600;">⚠️ {{ report.low_stock_items }} items</span>
+                                {% else %}
+                                    <span style="color: var(--text-muted);">0</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if report.expired_items > 0 %}
+                                    <span style="color: var(--color-expired); font-weight: 600;">❌ {{ report.expired_items }} items</span>
+                                {% else %}
+                                    <span style="color: var(--text-muted);">0</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('mandal.village_inventory', village_name=report.village) }}" class="btn btn-secondary btn-sm" style="padding:6px 12px; font-size:0.85rem;">
+                                    Open Register &rarr;
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 40px 10px;">
+                            No villages registered under your Mandal office.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
