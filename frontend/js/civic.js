@@ -532,6 +532,8 @@ async function loadComplaintsList() {
         let assignBtn = "";
         if (comp.status === "Submitted" || comp.status === "AI Categorized" || comp.status === "Pending Admin Review") {
           assignBtn = `<button class="btn" onclick="openAssignmentModal(${comp.id})" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;"><i class="fa-solid fa-user-plus"></i> Allocate</button>`;
+        } else if (comp.status === "Resolved") {
+          assignBtn = `<button class="btn" onclick="verifyComplaint(${comp.id})" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; background-color: var(--color-success);"><i class="fa-solid fa-certificate"></i> Verify</button>`;
         } else {
           assignBtn = `<span style="font-size: 0.75rem; color: var(--text-muted);">Assigned: <a href="#" onclick="viewEmployeeProfile(${comp.assigned_employee_id})" style="color:var(--color-civic); text-decoration:none;">${comp.employee_name || 'Officer'}</a></span>`;
         }
@@ -1282,6 +1284,31 @@ window.openTracker = function(cid) {
 
 window.viewEmployeeProfile = function(empId) {
   window.open(`employee-profile.html?id=${empId}`, '_blank');
+};
+
+window.verifyComplaint = async function(cid) {
+  if (!confirm("Are you sure you want to verify the resolved work for this complaint?")) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/civic/complaints/${cid}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'Verified',
+        actor: currentUser.full_name
+      })
+    });
+    if (res.ok) {
+      alert("Complaint marked as VERIFIED!");
+      loadComplaintsList();
+      if (document.getElementById("view-admin-dashboard").style.display === "block") {
+        loadAdminDashboard();
+      }
+    } else {
+      alert("Verification update failed.");
+    }
+  } catch (err) {
+    console.error(err);
+  }
 };
 
 
