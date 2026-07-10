@@ -279,8 +279,12 @@ function switchView(viewId) {
   // Hide all views
   document.querySelectorAll(".dynamic-view").forEach(v => v.style.display = "none");
   
-  // Show target view
-  document.getElementById(`view-${viewId}`).style.display = "block";
+  // Show target view with fade-in animation
+  const targetView = document.getElementById(`view-${viewId}`);
+  targetView.style.display = "block";
+  targetView.style.animation = "none";
+  targetView.offsetHeight; // force reflow
+  targetView.style.animation = "fadeInUp 0.4s ease forwards";
   
   // Highlight active sidebar button
   document.querySelectorAll(".sidebar-btn").forEach(btn => btn.classList.remove("active"));
