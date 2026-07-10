@@ -9,20 +9,22 @@ document.addEventListener("DOMContentLoaded", () => {
                     window.location.pathname.includes("/pages/rescue/") || 
                     window.location.pathname.includes("/pages/medical/");
   
-  const basePath = isSubPage ? "../../" : "";
-  const pagePath = isSubPage ? "../" : "pages/";
+  const homeLink = isSubPage ? "../index.html" : "index.html";
+  const civicLink = isSubPage ? "../civic/index.html" : "civic/index.html";
+  const rescueLink = isSubPage ? "../rescue/index.html" : "rescue/index.html";
+  const medicalLink = isSubPage ? "../medical/index.html" : "medical/index.html";
 
   placeholder.innerHTML = `
     <nav class="navbar">
       <div class="container navbar-container">
-        <a href="${basePath}index.html" class="brand">
+        <a href="${homeLink}" class="brand">
           <span>🏛️</span> GovConnect
         </a>
         <ul class="nav-links">
-          <li><a href="${basePath}index.html" class="nav-link" id="nav-home">Home</a></li>
-          <li><a href="${basePath}${pagePath}civic/index.html" class="nav-link" id="nav-civic">Civic Issues</a></li>
-          <li><a href="${basePath}${pagePath}rescue/index.html" class="nav-link" id="nav-rescue">Rescue Services</a></li>
-          <li><a href="${basePath}${pagePath}medical/index.html" class="nav-link" id="nav-medical">Medical Emergency</a></li>
+          <li><a href="${homeLink}" class="nav-link" id="nav-home">Home</a></li>
+          <li><a href="${civicLink}" class="nav-link" id="nav-civic">Civic Issues</a></li>
+          <li><a href="${rescueLink}" class="nav-link" id="nav-rescue">Rescue Services</a></li>
+          <li><a href="${medicalLink}" class="nav-link" id="nav-medical">Medical Emergency</a></li>
         </ul>
       </div>
     </nav>
