@@ -106,6 +106,176 @@ export function ensureGoogleMapsLoaded() {
   return googleMapsLoadedPromise;
 }
 
+let leafletLoadedPromise = null;
+
+export function ensureLeafletLoaded() {
+  if (window.L) {
+    return Promise.resolve();
+  }
+  if (leafletLoadedPromise) {
+    return leafletLoadedPromise;
+  }
+  leafletLoadedPromise = new Promise((resolve) => {
+    // Load Leaflet CSS
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(link);
+    
+    // Load Leaflet JS
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => {
+      resolve();
+    };
+    document.head.appendChild(script);
+  });
+  return leafletLoadedPromise;
+}
+
+export async function renderUnifiedMap(containerId, center, zoom, markers = []) {
+  const container = document.getElementById(containerId);
+  if (!container) return null;
+  container.innerHTML = ''; // Clear loading/offline text
+  
+  // 1. Fetch maps key config
+  let key = '';
+  try {
+    const config = await apiGet('/api/rescue/config/maps-key');
+    key = config.key || '';
+  } catch (err) {
+    console.warn("Could not fetch maps API key from backend:", err);
+  }
+  
+  const isDummy = !key || key.toLowerCase().includes('dummy') || key === 'undefined';
+  
+  if (!isDummy) {
+    // Attempt Google Maps
+    try {
+      await ensureGoogleMapsLoaded();
+      const map = new google.maps.Map(container, {
+        center: center,
+        zoom: zoom,
+        styles: MAP_DARK_STYLES,
+        disableDefaultUI: true,
+        zoomControl: true
+      });
+      
+      const bounds = new google.maps.LatLngBounds();
+      let hasMarkers = false;
+      
+      markers.forEach(m => {
+        const markerColor = m.color || '#3b82f6';
+        let markerOptions = {
+          position: m.pos,
+          map: map,
+          title: m.title
+        };
+        
+        if (m.icon) {
+          if (m.icon.url) {
+            markerOptions.icon = m.icon;
+          } else if (typeof m.icon === 'string') {
+            // Text/Emoji Marker representation in Google Maps
+            // Using small circle with label
+            markerOptions.label = {
+              text: m.icon,
+              fontSize: '20px'
+            };
+            markerOptions.icon = {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 0
+            };
+          }
+        } else {
+          markerOptions.icon = {
+            path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+            fillColor: markerColor,
+            fillOpacity: 0.9,
+            strokeWeight: 2,
+            strokeColor: "#ffffff",
+            scale: 6
+          };
+        }
+        
+        const gMarker = new google.maps.Marker(markerOptions);
+        
+        if (m.info) {
+          const infoWindow = new google.maps.InfoWindow({
+            content: m.info
+          });
+          gMarker.addListener('click', () => {
+            infoWindow.open(map, gMarker);
+          });
+        }
+        
+        bounds.extend(m.pos);
+        hasMarkers = true;
+      });
+      
+      if (hasMarkers && markers.length > 1) {
+        map.fitBounds(bounds);
+        const listener = google.maps.event.addListener(map, "idle", () => {
+          if (map.getZoom() > 15) map.setZoom(15);
+          google.maps.event.removeListener(listener);
+        });
+      }
+      
+      return { type: 'google', map, rawMap: map };
+    } catch (gErr) {
+      console.warn("Google Maps failed to load, falling back to Leaflet:", gErr);
+    }
+  }
+  
+  // 2. Leaflet Fallback
+  await ensureLeafletLoaded();
+  const map = L.map(container, {
+    zoomControl: true,
+    attributionControl: false
+  }).setView([center.lat, center.lng], zoom);
+  
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 20
+  }).addTo(map);
+  
+  const group = [];
+  
+  markers.forEach(m => {
+    let leafletMarker;
+    if (m.icon && typeof m.icon === 'string') {
+      // Use Leaflet DivIcon for emoji icon symbols (vehicle tracking)
+      const icon = L.divIcon({
+        html: `<div style="font-size: 24px; text-shadow: 0 0 4px rgba(0,0,0,0.5);">${m.icon}</div>`,
+        className: 'custom-div-icon',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      });
+      leafletMarker = L.marker([m.pos.lat, m.pos.lng], { icon }).addTo(map);
+    } else {
+      const markerColor = m.color || '#3b82f6';
+      leafletMarker = L.circleMarker([m.pos.lat, m.pos.lng], {
+        radius: 8,
+        fillColor: markerColor,
+        fillOpacity: 0.9,
+        color: '#ffffff',
+        weight: 2
+      }).addTo(map);
+    }
+    
+    if (m.info) {
+      leafletMarker.bindPopup(m.info);
+    }
+    group.push([m.pos.lat, m.pos.lng]);
+  });
+  
+  if (group.length > 1) {
+    map.fitBounds(group, { padding: [40, 40] });
+  }
+  
+  return { type: 'leaflet', map, rawMap: map };
+}
+
+
 export const MAP_DARK_STYLES = [
   { elementType: "geometry", stylers: [{ color: "#1a1a24" }] },
   { elementType: "labels.text.stroke", stylers: [{ color: "#1a1a24" }] },
@@ -517,36 +687,29 @@ function renderResultPage(e, root) {
     </div>
   `;
 
-  // Render Google Map at the coordinate
+  // Render Map at the coordinate
   if (e.lat && e.lng) {
+    const pos = { lat: parseFloat(e.lat), lng: parseFloat(e.lng) };
+    const markerColor = {
+      'Critical': '#ef4444',
+      'High':     '#f97316',
+      'Medium':   '#eab308',
+      'Low':      '#22c55e'
+    }[e.severity] || '#3b82f6';
+    
     setTimeout(() => {
-      ensureGoogleMapsLoaded().then(() => {
-        const pos = { lat: parseFloat(e.lat), lng: parseFloat(e.lng) };
-        const mapEl = document.getElementById('result-map');
-        if (!mapEl) return;
-        const map = new google.maps.Map(mapEl, {
-          center: pos,
-          zoom: 15,
-          styles: MAP_DARK_STYLES,
-          disableDefaultUI: true,
-          zoomControl: true
-        });
-        new google.maps.Marker({
-          position: pos,
-          map: map,
+      renderUnifiedMap('result-map', pos, 15, [
+        {
+          pos: pos,
           title: e.incident_type,
-          animation: google.maps.Animation.DROP
-        });
-      }).catch(err => {
-        console.warn("Could not load Google Map on Citizen Results page:", err);
-        const mapEl = document.getElementById('result-map');
-        if (mapEl) {
-          mapEl.innerHTML = `<div style="padding:2rem; text-align:center; color:var(--text-muted); font-size:0.8rem;">🗺️ Map offline (Google Maps API Key not set)</div>`;
+          color: markerColor,
+          info: `<div style="color:#000; font-size:0.82rem; line-height:1.4;"><strong>${e.incident_type}</strong><br>Severity: ${e.severity}</div>`
         }
-      });
+      ]);
     }, 100);
   }
 }
+
 
 
 function getPolicyExplanation(severity, status) {
@@ -625,6 +788,15 @@ function renderTrackingPage(data, root) {
         <div class="tracking-stepper">${stepsHTML}</div>
       </div>
 
+      <!-- Live Team Tracking Map -->
+      <div class="glass-card" style="margin-bottom:1.5rem; padding:0; overflow:hidden;">
+        <div style="padding:1rem; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="margin:0; font-size:0.95rem; font-family:var(--font-display); color:var(--rescue-primary);">🗺️ Live Team Tracker Map</h3>
+          <span style="font-size:0.75rem; color:var(--text-muted);" id="tracker-status-text">Locating rescue unit...</span>
+        </div>
+        <div id="tracker-map" style="width:100%; height:320px; background:rgba(0,0,0,0.1);"></div>
+      </div>
+
       <!-- Emergency details -->
       <div class="glass-card" style="margin-bottom:1.5rem;">
         <div class="rescue-section-title">🔍 Emergency Details</div>
@@ -669,7 +841,109 @@ function renderTrackingPage(data, root) {
       </div>
     </div>
   `;
+
+  // Team Tracking Simulation on Map
+  if (e.lat && e.lng) {
+    const TEAM_BASES = {
+      'Fire Response Unit':             { lat: 17.4374, lng: 78.4482, name: 'Ameerpet Fire Station Unit', icon: '🚒' },
+      'Flood Rescue (NDRF)':            { lat: 17.4399, lng: 78.5020, name: 'Secunderabad NDRF Battalion', icon: '🚤' },
+      'SDRF Structural Response Team':  { lat: 17.4265, lng: 78.4124, name: 'Jubilee Hills SDRF Team', icon: '🚜' },
+      'Hazmat Response Unit':           { lat: 17.4483, lng: 78.3741, name: 'Gachibowli Hazmat Station', icon: '🚐' },
+      'Emergency Response Team':        { lat: 17.4486, lng: 78.3908, name: 'Madhapur Patrol Unit', icon: '🚑' },
+      'Electrical Emergency Unit':      { lat: 17.4447, lng: 78.4664, name: 'Begumpet Power Grid Response', icon: '🚐' },
+      'Civic Emergency Team':           { lat: 17.4699, lng: 78.3678, name: 'Kondapur Municipal Crew', icon: '🚛' }
+    };
+
+    const teamBase = TEAM_BASES[e.recommended_team] || { lat: 17.3850, lng: 78.4867, name: 'Central Command Base', icon: '🚒' };
+    const incidentPos = { lat: parseFloat(e.lat), lng: parseFloat(e.lng) };
+
+    let teamPos = { ...teamBase };
+    let trackerStatus = 'Preparing dispatch...';
+
+    const statusIndex = current_step_index;
+    
+    if (statusIndex <= 3) {
+      teamPos = { ...teamBase };
+      trackerStatus = `Unit status: ${e.status}. Stationary at ${teamBase.name}.`;
+    } else if (statusIndex === 4) {
+      teamPos = {
+        lat: teamBase.lat + (incidentPos.lat - teamBase.lat) * 0.5,
+        lng: teamBase.lng + (incidentPos.lng - teamBase.lng) * 0.5
+      };
+      trackerStatus = `Unit status: ${e.status}. En route to incident scene.`;
+    } else {
+      teamPos = { ...incidentPos };
+      trackerStatus = `Unit status: ${e.status}. Arrived at incident scene.`;
+    }
+
+    setTimeout(async () => {
+      const markers = [
+        {
+          pos: incidentPos,
+          title: `Emergency Location`,
+          color: '#ef4444',
+          info: `<div style="color:#000; font-size:0.82rem;">📍 <strong>Incident Location</strong><br>${e.incident_type}</div>`
+        }
+      ];
+
+      if (statusIndex >= 2) {
+        markers.push({
+          pos: teamBase,
+          title: `${e.recommended_team} Base`,
+          color: '#3b82f6',
+          info: `<div style="color:#000; font-size:0.82rem;">🏢 <strong>${e.recommended_team} Base</strong><br>${teamBase.name}</div>`
+        });
+
+        markers.push({
+          pos: teamPos,
+          title: `${e.nearest_rescue_team || e.recommended_team} Vehicle`,
+          icon: teamBase.icon,
+          info: `<div style="color:#000; font-size:0.82rem;">${teamBase.icon} <strong>${e.nearest_rescue_team || e.recommended_team}</strong><br>Status: ${e.status}</div>`
+        });
+      }
+
+      const mapResult = await renderUnifiedMap('tracker-map', incidentPos, 13, markers);
+      
+      const statusTextEl = document.getElementById('tracker-status-text');
+      if (statusTextEl) {
+        statusTextEl.textContent = trackerStatus;
+      }
+
+      if (mapResult && statusIndex >= 2) {
+        const rawMap = mapResult.map;
+        if (mapResult.type === 'leaflet') {
+          L.polyline([
+            [teamBase.lat, teamBase.lng],
+            [incidentPos.lat, incidentPos.lng]
+          ], {
+            color: '#fb923c',
+            weight: 3,
+            dashArray: '5, 8'
+          }).addTo(rawMap);
+        } else if (mapResult.type === 'google') {
+          new google.maps.Polyline({
+            path: [teamBase, incidentPos],
+            geodesic: true,
+            strokeColor: '#fb923c',
+            strokeOpacity: 0.8,
+            strokeWeight: 3,
+            icons: [{
+              icon: {
+                path: 'M 0,-1 0,1',
+                strokeOpacity: 1,
+                scale: 2
+              },
+              offset: '0',
+              repeat: '10px'
+            }],
+            map: rawMap
+          });
+        }
+      }
+    }, 100);
+  }
 }
+
 
 // ─── CONTROL ROOM ──────────────────────────────────────────
 
@@ -685,93 +959,36 @@ function updateControlRoomMap() {
   const closedStatuses = ['Case Closed', 'Mission Completed', 'Rescue Completed'];
   const activeEmergencies = controlData.filter(e => e.lat && e.lng && !closedStatuses.includes(e.status));
   
-  ensureGoogleMapsLoaded().then(() => {
-    const mapEl = document.getElementById('map');
-    if (!mapEl) return;
+  const center = { lat: 17.385044, lng: 78.486671 }; // Hyderabad Center
+  const markers = activeEmergencies.map(e => {
+    const markerColor = {
+      'Critical': '#ef4444',
+      'High':     '#f97316',
+      'Medium':   '#eab308',
+      'Low':      '#22c55e'
+    }[e.severity] || '#3b82f6';
     
-    // Initialize map if not yet done
-    if (!controlRoomMap) {
-      controlRoomMap = new google.maps.Map(mapEl, {
-        center: { lat: 17.385044, lng: 78.486671 }, // Hyderabad coords
-        zoom: 12,
-        styles: MAP_DARK_STYLES,
-        disableDefaultUI: true,
-        zoomControl: true
-      });
-    }
+    const infoContent = `
+      <div style="color:#000000; font-family:sans-serif; padding:0.5rem; max-width:250px; line-height:1.4;">
+        <h4 style="margin:0 0 0.25rem 0; font-size:0.95rem; font-weight:700;">${e.emergency_id}</h4>
+        <div style="font-size:0.85rem; font-weight:700; color:${markerColor}; margin-bottom:0.4rem;">${e.incident_type} (${e.severity})</div>
+        <div style="font-size:0.8rem; margin-bottom:0.4rem;"><strong>Status:</strong> ${e.status}</div>
+        <div style="font-size:0.8rem; margin-bottom:0.4rem;"><strong>Assigned Team:</strong> ${e.nearest_rescue_team || e.recommended_team || 'Unassigned'}</div>
+        <div style="font-size:0.78rem; background:#f4f4f5; padding:0.35rem; border-radius:4px; color:#4b5563;"><strong>AI Summary:</strong> ${e.ai_decision_summary || 'No summary available.'}</div>
+      </div>
+    `;
     
-    // Clear existing markers
-    controlRoomMarkers.forEach(m => m.setMap(null));
-    controlRoomMarkers = [];
-    
-    const bounds = new google.maps.LatLngBounds();
-    let hasCoords = false;
-    
-    activeEmergencies.forEach(e => {
-      const pos = { lat: parseFloat(e.lat), lng: parseFloat(e.lng) };
-      bounds.extend(pos);
-      hasCoords = true;
-      
-      const markerColor = {
-        'Critical': '#ef4444',
-        'High':     '#f97316',
-        'Medium':   '#eab308',
-        'Low':      '#22c55e'
-      }[e.severity] || '#3b82f6';
-      
-      const marker = new google.maps.Marker({
-        position: pos,
-        map: controlRoomMap,
-        title: `${e.emergency_id} - ${e.incident_type}`,
-        icon: {
-          path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-          fillColor: markerColor,
-          fillOpacity: 0.9,
-          strokeWeight: 2,
-          strokeColor: "#ffffff",
-          scale: 6
-        }
-      });
-      
-      const infoContent = `
-        <div style="color:#000000; font-family:sans-serif; padding:0.5rem; max-width:250px; line-height:1.4;">
-          <h4 style="margin:0 0 0.25rem 0; font-size:0.95rem; font-weight:700;">${e.emergency_id}</h4>
-          <div style="font-size:0.85rem; font-weight:700; color:${markerColor}; margin-bottom:0.4rem;">${e.incident_type} (${e.severity})</div>
-          <div style="font-size:0.8rem; margin-bottom:0.4rem;"><strong>Status:</strong> ${e.status}</div>
-          <div style="font-size:0.8rem; margin-bottom:0.4rem;"><strong>Assigned Team:</strong> ${e.nearest_rescue_team || e.recommended_team || 'Unassigned'}</div>
-          <div style="font-size:0.78rem; background:#f4f4f5; padding:0.35rem; border-radius:4px; color:#4b5563;"><strong>AI Summary:</strong> ${e.ai_decision_summary || 'No summary available.'}</div>
-        </div>
-      `;
-      
-      const infoWindow = new google.maps.InfoWindow({
-        content: infoContent
-      });
-      
-      marker.addListener('click', () => {
-        infoWindow.open(controlRoomMap, marker);
-      });
-      
-      controlRoomMarkers.push(marker);
-    });
-    
-    // Fit map view if there are active locations
-    if (hasCoords) {
-      controlRoomMap.fitBounds(bounds);
-      const listener = google.maps.event.addListener(controlRoomMap, "idle", () => {
-        if (controlRoomMap.getZoom() > 15) {
-          controlRoomMap.setZoom(15);
-        }
-        google.maps.event.removeListener(listener);
-      });
-    }
-  }).catch(err => {
-    console.warn("Could not load Google Map in Control Room:", err);
-    const mapEl = document.getElementById('map');
-    if (mapEl) {
-      mapEl.innerHTML = `<div style="padding:2rem; text-align:center; color:var(--text-muted); font-size:0.85rem;">🗺️ Map offline (Google Maps API Key not set in environment variables)</div>`;
-    }
+    return {
+      pos: { lat: parseFloat(e.lat), lng: parseFloat(e.lng) },
+      title: `${e.emergency_id} - ${e.incident_type}`,
+      color: markerColor,
+      info: infoContent
+    };
   });
+  
+  renderUnifiedMap('map', center, 12, markers);
 }
+
 
 export async function initControlRoom() {
   const root    = document.getElementById('control-root');
@@ -1526,33 +1743,18 @@ export async function initTeamDashboard() {
       </div>
     `;
 
-    // Render Google Map at scene
+    // Render Map at scene
     if (m.lat && m.lng) {
       setTimeout(() => {
-        ensureGoogleMapsLoaded().then(() => {
-          const pos = { lat: parseFloat(m.lat), lng: parseFloat(m.lng) };
-          const mapEl = document.getElementById('team-map');
-          if (!mapEl) return;
-          const map = new google.maps.Map(mapEl, {
-            center: pos,
-            zoom: 15,
-            styles: MAP_DARK_STYLES,
-            disableDefaultUI: true,
-            zoomControl: true
-          });
-          new google.maps.Marker({
-            position: pos,
-            map: map,
+        const pos = { lat: parseFloat(m.lat), lng: parseFloat(m.lng) };
+        renderUnifiedMap('team-map', pos, 15, [
+          {
+            pos: pos,
             title: m.incident_type,
-            animation: google.maps.Animation.DROP
-          });
-        }).catch(err => {
-          console.warn("Could not load Google Map in team details:", err);
-          const mapEl = document.getElementById('team-map');
-          if (mapEl) {
-            mapEl.innerHTML = `<div style="padding:1.5rem; text-align:center; color:var(--text-muted); font-size:0.75rem;">🗺️ Map offline (Google Maps API Key not set)</div>`;
+            color: m.severity === 'Critical' ? '#ef4444' : '#fb923c',
+            info: `<div style="color:#000; font-size:0.82rem; line-height:1.4;"><strong>${m.incident_type}</strong><br>Severity: ${m.severity}</div>`
           }
-        });
+        ]);
         
         // Bind Navigate button click
         document.getElementById('btn-navigate-gmaps')?.addEventListener('click', () => {
@@ -1560,6 +1762,7 @@ export async function initTeamDashboard() {
         });
       }, 50);
     }
+
 
 
     // Distance computation and activation checks
