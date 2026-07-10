@@ -151,7 +151,7 @@ By introducing Explainable Artificial Intelligence into day-to-day government op
 
 ## Team Members
 - Adithya Goud Palamoor
-- Shiva Nallela
+- Shiva Nallela patel
 - Venkat Reddy
 - Ibrahim mohammed
 
