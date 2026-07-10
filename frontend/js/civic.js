@@ -515,7 +515,7 @@ async function loadComplaintsList() {
       
       if (currentUser.role === "Citizen") {
         let actionBtn = `<button class="btn btn-outline" onclick="openTracker(${comp.id})" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;"><i class="fa-solid fa-route"></i> Track</button>`;
-        if (comp.status === "Resolved") {
+        if (comp.status === "Resolved" || comp.status === "Verified") {
           actionBtn += ` <button class="btn" onclick="openRatingModal(${comp.id})" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; background-color: var(--color-success);"><i class="fa-solid fa-star"></i> Rate & Close</button>`;
         }
         
