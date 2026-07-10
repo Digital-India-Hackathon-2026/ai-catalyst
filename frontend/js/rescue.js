@@ -640,7 +640,7 @@ export function initSubmissionForm() {
               const formData = new FormData();
               formData.append('file', audioBlob, 'recording.webm');
 
-              const res = await fetch('/api/rescue/transcribe', {
+              const res = await fetch(`${API_BASE}/api/rescue/transcribe`, {
                 method: 'POST',
                 body: formData
               });
