@@ -3,6 +3,7 @@ from db import get_db_connection
 from datetime import datetime
 import re
 import random
+import json
 
 rescue_bp = Blueprint('rescue', __name__)
 
@@ -299,9 +300,19 @@ def rescue_status():
             "GET  /api/rescue/emergencies",
             "GET  /api/rescue/emergencies/<id>",
             "PATCH /api/rescue/emergencies/<id>",
-            "GET  /api/rescue/track/<emergency_id>"
+            "GET  /api/rescue/track/<emergency_id>",
+            "GET  /api/rescue/config/maps-key"
         ]
     })
+
+
+@rescue_bp.route('/api/rescue/config/maps-key', methods=['GET'])
+def get_maps_key():
+    """Returns the Google Maps API Key from environment variables."""
+    import os
+    key = os.environ.get('GOOGLE_MAPS_API_KEY', '')
+    return jsonify({"key": key})
+
 
 
 @rescue_bp.route('/api/rescue/team/login', methods=['POST'])

@@ -65,6 +65,129 @@ function severityBadge(severity) {
   return `<span class="badge-severity ${s}">${icons[s] || ''} ${severity}</span>`;
 }
 
+let googleMapsLoadedPromise = null;
+
+export function ensureGoogleMapsLoaded() {
+  if (window.google && window.google.maps) {
+    return Promise.resolve();
+  }
+  if (googleMapsLoadedPromise) {
+    return googleMapsLoadedPromise;
+  }
+
+  googleMapsLoadedPromise = new Promise(async (resolve, reject) => {
+    try {
+      const config = await apiGet('/api/rescue/config/maps-key');
+      const key = config.key || '';
+      if (!key) {
+        reject(new Error("Maps API Key missing"));
+        return;
+      }
+      
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&callback=initGoogleMap`;
+      script.async = true;
+      script.defer = true;
+      
+      window.initGoogleMap = () => {
+        resolve();
+      };
+      
+      script.onerror = (err) => {
+        reject(err);
+      };
+      
+      document.head.appendChild(script);
+    } catch (err) {
+      reject(err);
+    }
+  });
+  
+  return googleMapsLoadedPromise;
+}
+
+export const MAP_DARK_STYLES = [
+  { elementType: "geometry", stylers: [{ color: "#1a1a24" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#1a1a24" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#7b7c85" }] },
+  {
+    featureType: "administrative.locality",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#fb923c" }],
+  },
+  {
+    featureType: "poi",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#f59e0b" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "geometry",
+    stylers: [{ color: "#12261e" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#6b7280" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry",
+    stylers: [{ color: "#2d2d3a" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#21212c" }],
+  },
+  {
+    featureType: "road",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#9ca3af" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry",
+    stylers: [{ color: "#3e3e4f" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#2d2d3a" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#fb923c" }],
+  },
+  {
+    featureType: "transit",
+    elementType: "geometry",
+    stylers: [{ color: "#272733" }],
+  },
+  {
+    featureType: "transit.station",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#fb923c" }],
+  },
+  {
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#0f172a" }],
+  },
+  {
+    featureType: "water",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#475569" }],
+  },
+  {
+    featureType: "water",
+    elementType: "labels.text.stroke",
+    stylers: [{ color: "#0f172a" }],
+  },
+];
+
+
 function statusBadge(status) {
   const map = {
     'Auto Dispatched':            'auto-dispatch',
@@ -243,6 +366,23 @@ function renderResultPage(e, root) {
     'Pending Review':              '📋',
   }[e.status] || '📋';
 
+  // Parse complete Gemini JSON response
+  let gemini = {};
+  try {
+    if (e.ai_analysis_json) {
+      gemini = JSON.parse(e.ai_analysis_json);
+    }
+  } catch (err) {
+    console.error("Error parsing ai_analysis_json:", err);
+  }
+
+  const aiSummary = gemini.ai_summary || e.ai_decision_summary || 'No summary available.';
+  const requiredDepts = Array.isArray(gemini.required_departments) ? gemini.required_departments : (e.recommended_departments ? e.recommended_departments.split(', ') : []);
+  const risks = Array.isArray(gemini.possible_risks) ? gemini.possible_risks : (e.possible_risks ? e.possible_risks.split(', ') : []);
+  const actions = Array.isArray(gemini.suggested_rescue_actions) ? gemini.suggested_rescue_actions : (e.suggested_actions ? e.suggested_actions.split(', ') : []);
+  const address = gemini.address || 'N/A';
+  const landmark = gemini.landmark || e.landmark || 'N/A';
+
   const confidenceCircumference = 2 * Math.PI * 42; // r=42
   const dashOffset = confidenceCircumference * (1 - e.confidence_score / 100);
 
@@ -252,6 +392,11 @@ function renderResultPage(e, root) {
     medium:   '#f59e0b',
     low:      '#10b981'
   }[sevClass] || '#f59e0b';
+
+  // Format list items into clean lists
+  const deptsHTML = requiredDepts.map(d => `<span style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); color:var(--rescue-primary); padding:0.15rem 0.5rem; border-radius:20px; font-size:0.75rem; white-space:nowrap;">${d}</span>`).join(' ') || 'N/A';
+  const risksHTML = risks.map(r => `<li style="margin-bottom:0.35rem; color:#fca5a5;">⚠️ ${r}</li>`).join('') || '<li style="color:var(--text-muted);">No immediate risks listed</li>';
+  const actionsHTML_list = actions.map(a => `<li style="margin-bottom:0.35rem; color:#6ee7b7;">✔️ ${a}</li>`).join('') || '<li style="color:var(--text-muted);">No suggested actions listed</li>';
 
   root.innerHTML = `
     <div class="result-layout">
@@ -266,55 +411,55 @@ function renderResultPage(e, root) {
 
         <div class="result-meta-grid">
           <div class="result-meta-item">
-            <div class="label">🚒 Rescue Team</div>
+            <div class="label">🚒 Recommended Team</div>
             <div class="value" style="font-size:0.9rem;">${e.recommended_team}</div>
           </div>
           <div class="result-meta-item">
-            <div class="label">⏱ Est. Response</div>
+            <div class="label">⏱ Est. Response Time</div>
             <div class="value">${e.response_time_minutes} min</div>
           </div>
           <div class="result-meta-item">
             <div class="label">🏢 Depts Involved</div>
-            <div class="value" style="font-size:0.82rem;">${e.recommended_departments || 'N/A'}</div>
+            <div class="value" style="display:flex; flex-wrap:wrap; gap:0.25rem; margin-top:0.25rem;">${deptsHTML}</div>
           </div>
           <div class="result-meta-item">
-            <div class="label">📍 Nearest Team</div>
+            <div class="label">📍 Assigned Patrol Unit</div>
             <div class="value" style="font-size:0.82rem;">${e.nearest_rescue_team || 'N/A'}</div>
           </div>
           <div class="result-meta-item">
-            <div class="label">📍 Location</div>
-            <div class="value" style="font-size:0.82rem;">${e.landmark || (e.lat ? `${e.lat}, ${e.lng}` : 'Not specified')}</div>
+            <div class="label">📍 Context Landmark</div>
+            <div class="value" style="font-size:0.82rem;">${landmark}</div>
           </div>
           <div class="result-meta-item">
-            <div class="label">🕐 Submitted</div>
-            <div class="value" style="font-size:0.82rem;">${formatTime(e.submitted_at)}</div>
+            <div class="label">🏠 Context Address</div>
+            <div class="value" style="font-size:0.82rem;">${address}</div>
           </div>
         </div>
 
         <!-- Gemini AI Detailed Diagnosis -->
         <div style="margin-top:1.5rem; border-top:1px solid rgba(255,255,255,0.08); padding-top:1rem;">
           <h4 style="font-size:0.9rem; font-weight:700; color:var(--rescue-primary); margin-bottom:0.75rem; display:flex; align-items:center; gap:0.5rem;">
-            🧠 Gemini AI Detailed Analysis
+            🧠 Gemini AI Analysis & Diagnostic Insights
           </h4>
-          <div style="display:flex; flex-direction:column; gap:0.75rem; font-size:0.85rem; line-height:1.5; color:var(--text-secondary);">
+          <div style="display:flex; flex-direction:column; gap:1rem; font-size:0.85rem; line-height:1.5; color:var(--text-secondary);">
             <div>
-              <strong style="color:var(--text-primary); display:block; margin-bottom:0.25rem;">📝 Decision Summary:</strong>
-              <span style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:0.5rem; border-radius:6px; display:block;">
-                ${e.ai_decision_summary || 'No summary available.'}
+              <strong style="color:var(--text-primary); display:block; margin-bottom:0.25rem;">📝 AI Summary:</strong>
+              <span style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:0.6rem 0.8rem; border-radius:6px; display:block;">
+                ${aiSummary}
               </span>
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:0.25rem;">
               <div>
                 <strong style="color:var(--text-primary); display:block; margin-bottom:0.25rem;">⚠️ Possible Risks:</strong>
-                <span style="background:rgba(239,68,68,0.05); border:1px solid rgba(239,68,68,0.15); color:#fca5a5; padding:0.5rem 0.6rem; border-radius:6px; display:block; min-height:60px;">
-                  ${e.possible_risks || 'No immediate risks identified.'}
-                </span>
+                <ul style="background:rgba(239,68,68,0.05); border:1px solid rgba(239,68,68,0.12); padding:0.75rem 1rem; border-radius:6px; min-height:80px; margin:0; list-style:none;">
+                  ${risksHTML}
+                </ul>
               </div>
               <div>
-                <strong style="color:var(--text-primary); display:block; margin-bottom:0.25rem;">🚒 Suggested Actions:</strong>
-                <span style="background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.15); color:#6ee7b7; padding:0.5rem 0.6rem; border-radius:6px; display:block; min-height:60px;">
-                  ${e.suggested_actions || 'No suggested actions available.'}
-                </span>
+                <strong style="color:var(--text-primary); display:block; margin-bottom:0.25rem;">🚒 Suggested Rescue Actions:</strong>
+                <ul style="background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.12); padding:0.75rem 1rem; border-radius:6px; min-height:80px; margin:0; list-style:none;">
+                  ${actionsHTML_list}
+                </ul>
               </div>
             </div>
           </div>
@@ -323,6 +468,14 @@ function renderResultPage(e, root) {
         <div class="result-status-banner ${statusBannerClass}" style="margin-top:1.5rem;">
           <span>${statusIcon}</span>
           <span>${e.status}</span>
+        </div>
+
+        <!-- Embedded Google Map -->
+        <div style="margin-top:1.5rem; border-top:1px solid rgba(255,255,255,0.08); padding-top:1rem;">
+          <h4 style="font-size:0.9rem; font-weight:700; color:var(--rescue-primary); margin-bottom:0.75rem;">
+            🗺️ Incident Location Map
+          </h4>
+          <div id="result-map" style="width:100%; height:250px; border-radius:8px; background:rgba(0,0,0,0.1); border:1px solid rgba(255,255,255,0.05);"></div>
         </div>
       </div>
 
@@ -363,7 +516,38 @@ function renderResultPage(e, root) {
       </div>
     </div>
   `;
+
+  // Render Google Map at the coordinate
+  if (e.lat && e.lng) {
+    setTimeout(() => {
+      ensureGoogleMapsLoaded().then(() => {
+        const pos = { lat: parseFloat(e.lat), lng: parseFloat(e.lng) };
+        const mapEl = document.getElementById('result-map');
+        if (!mapEl) return;
+        const map = new google.maps.Map(mapEl, {
+          center: pos,
+          zoom: 15,
+          styles: MAP_DARK_STYLES,
+          disableDefaultUI: true,
+          zoomControl: true
+        });
+        new google.maps.Marker({
+          position: pos,
+          map: map,
+          title: e.incident_type,
+          animation: google.maps.Animation.DROP
+        });
+      }).catch(err => {
+        console.warn("Could not load Google Map on Citizen Results page:", err);
+        const mapEl = document.getElementById('result-map');
+        if (mapEl) {
+          mapEl.innerHTML = `<div style="padding:2rem; text-align:center; color:var(--text-muted); font-size:0.8rem;">🗺️ Map offline (Google Maps API Key not set)</div>`;
+        }
+      });
+    }, 100);
+  }
 }
+
 
 function getPolicyExplanation(severity, status) {
   if (severity === 'Critical')
@@ -494,6 +678,101 @@ let activeFilter = 'all';
 let pendingActionEid = null;
 let pendingAction    = null;
 
+let controlRoomMap = null;
+let controlRoomMarkers = [];
+
+function updateControlRoomMap() {
+  const closedStatuses = ['Case Closed', 'Mission Completed', 'Rescue Completed'];
+  const activeEmergencies = controlData.filter(e => e.lat && e.lng && !closedStatuses.includes(e.status));
+  
+  ensureGoogleMapsLoaded().then(() => {
+    const mapEl = document.getElementById('map');
+    if (!mapEl) return;
+    
+    // Initialize map if not yet done
+    if (!controlRoomMap) {
+      controlRoomMap = new google.maps.Map(mapEl, {
+        center: { lat: 17.385044, lng: 78.486671 }, // Hyderabad coords
+        zoom: 12,
+        styles: MAP_DARK_STYLES,
+        disableDefaultUI: true,
+        zoomControl: true
+      });
+    }
+    
+    // Clear existing markers
+    controlRoomMarkers.forEach(m => m.setMap(null));
+    controlRoomMarkers = [];
+    
+    const bounds = new google.maps.LatLngBounds();
+    let hasCoords = false;
+    
+    activeEmergencies.forEach(e => {
+      const pos = { lat: parseFloat(e.lat), lng: parseFloat(e.lng) };
+      bounds.extend(pos);
+      hasCoords = true;
+      
+      const markerColor = {
+        'Critical': '#ef4444',
+        'High':     '#f97316',
+        'Medium':   '#eab308',
+        'Low':      '#22c55e'
+      }[e.severity] || '#3b82f6';
+      
+      const marker = new google.maps.Marker({
+        position: pos,
+        map: controlRoomMap,
+        title: `${e.emergency_id} - ${e.incident_type}`,
+        icon: {
+          path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+          fillColor: markerColor,
+          fillOpacity: 0.9,
+          strokeWeight: 2,
+          strokeColor: "#ffffff",
+          scale: 6
+        }
+      });
+      
+      const infoContent = `
+        <div style="color:#000000; font-family:sans-serif; padding:0.5rem; max-width:250px; line-height:1.4;">
+          <h4 style="margin:0 0 0.25rem 0; font-size:0.95rem; font-weight:700;">${e.emergency_id}</h4>
+          <div style="font-size:0.85rem; font-weight:700; color:${markerColor}; margin-bottom:0.4rem;">${e.incident_type} (${e.severity})</div>
+          <div style="font-size:0.8rem; margin-bottom:0.4rem;"><strong>Status:</strong> ${e.status}</div>
+          <div style="font-size:0.8rem; margin-bottom:0.4rem;"><strong>Assigned Team:</strong> ${e.nearest_rescue_team || e.recommended_team || 'Unassigned'}</div>
+          <div style="font-size:0.78rem; background:#f4f4f5; padding:0.35rem; border-radius:4px; color:#4b5563;"><strong>AI Summary:</strong> ${e.ai_decision_summary || 'No summary available.'}</div>
+        </div>
+      `;
+      
+      const infoWindow = new google.maps.InfoWindow({
+        content: infoContent
+      });
+      
+      marker.addListener('click', () => {
+        infoWindow.open(controlRoomMap, marker);
+      });
+      
+      controlRoomMarkers.push(marker);
+    });
+    
+    // Fit map view if there are active locations
+    if (hasCoords) {
+      controlRoomMap.fitBounds(bounds);
+      const listener = google.maps.event.addListener(controlRoomMap, "idle", () => {
+        if (controlRoomMap.getZoom() > 15) {
+          controlRoomMap.setZoom(15);
+        }
+        google.maps.event.removeListener(listener);
+      });
+    }
+  }).catch(err => {
+    console.warn("Could not load Google Map in Control Room:", err);
+    const mapEl = document.getElementById('map');
+    if (mapEl) {
+      mapEl.innerHTML = `<div style="padding:2rem; text-align:center; color:var(--text-muted); font-size:0.85rem;">🗺️ Map offline (Google Maps API Key not set in environment variables)</div>`;
+    }
+  });
+}
+
 export async function initControlRoom() {
   const root    = document.getElementById('control-root');
   const statsEl = document.getElementById('control-stats');
@@ -512,6 +791,7 @@ export async function initControlRoom() {
             e.status.toLowerCase().includes(activeFilter)
           );
       renderEmergencies(root, filtered);
+      updateControlRoomMap();
     } catch (err) {
       root.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><p>Failed to load: ${err.message}. Is the Flask backend running?</p></div>`;
     }
@@ -524,32 +804,87 @@ export async function initControlRoom() {
   setInterval(refresh, 30000);
 }
 
+
 function renderStats(el) {
   if (!el) return;
-  const critical = controlData.filter(e => e.severity === 'Critical').length;
-  const high     = controlData.filter(e => e.severity === 'High').length;
-  const medium   = controlData.filter(e => e.severity === 'Medium').length;
-  const total    = controlData.length;
+
+  const closedStatuses = ['Case Closed', 'Mission Completed', 'Rescue Completed'];
+
+  // Active cases (not closed)
+  const activeCases = controlData.filter(e => !closedStatuses.includes(e.status));
+  const activeCount = activeCases.length;
+
+  const criticalCount = activeCases.filter(e => e.severity === 'Critical').length;
+  const highCount     = activeCases.filter(e => e.severity === 'High').length;
+  const mediumCount   = activeCases.filter(e => e.severity === 'Medium').length;
+  const lowCount      = activeCases.filter(e => e.severity === 'Low').length;
+
+  // Active teams busy (unique teams assigned to active emergencies)
+  const allTeamUnits = [
+    'Fire Unit 1', 'Fire Unit 2', 'Fire Unit 3',
+    'NDRF Unit A', 'NDRF Unit B',
+    'SDRF Unit 1', 'SDRF Unit 2',
+    'Hazmat Unit Alpha', 'Hazmat Unit Beta',
+    'ERT Unit 1', 'ERT Unit 2',
+    'EE Unit A', 'EE Unit B',
+    'Civic Crew 1', 'Civic Crew 2'
+  ];
+  
+  const busyTeamsSet = new Set();
+  activeCases.forEach(e => {
+    const assigned = e.nearest_rescue_team || e.recommended_team;
+    if (assigned && allTeamUnits.includes(assigned)) {
+      busyTeamsSet.add(assigned);
+    }
+  });
+
+  const busyTeamsCount = busyTeamsSet.size;
+  const availableTeamsCount = Math.max(0, 15 - busyTeamsCount);
+
+  // Completed missions today (any closed status updated/submitted today)
+  const todayStr = new Date().toISOString().split('T')[0];
+  const completedTodayCount = controlData.filter(e => {
+    const isClosed = closedStatuses.includes(e.status);
+    const wasUpdatedToday = (e.updated_at && e.updated_at.startsWith(todayStr)) || (e.submitted_at && e.submitted_at.startsWith(todayStr));
+    return isClosed && wasUpdatedToday;
+  }).length;
 
   el.innerHTML = `
     <div class="control-stat-card total-stat">
-      <div class="stat-label">Total Emergencies</div>
-      <div class="stat-num">${total}</div>
+      <div class="stat-label">Total Active Cases</div>
+      <div class="stat-num" style="color:var(--rescue-primary);">${activeCount}</div>
     </div>
     <div class="control-stat-card critical-stat">
-      <div class="stat-label">🔴 Critical</div>
-      <div class="stat-num">${critical}</div>
+      <div class="stat-label">🔴 Critical Priority</div>
+      <div class="stat-num">${criticalCount}</div>
     </div>
     <div class="control-stat-card high-stat">
-      <div class="stat-label">🟠 High</div>
-      <div class="stat-num">${high}</div>
+      <div class="stat-label">🟠 High Priority</div>
+      <div class="stat-num">${highCount}</div>
     </div>
     <div class="control-stat-card medium-stat">
-      <div class="stat-label">🟡 Medium</div>
-      <div class="stat-num">${medium}</div>
+      <div class="stat-label">🟡 Medium Priority</div>
+      <div class="stat-num">${mediumCount}</div>
+    </div>
+    <div class="control-stat-card low-stat">
+      <div class="stat-label">🟢 Low Priority</div>
+      <div class="stat-num" style="color:#10b981;">${lowCount}</div>
+    </div>
+    <div class="control-stat-card available-stat">
+      <div class="stat-label">🟢 Teams Available</div>
+      <div class="stat-num" style="color:#34d399;">${availableTeamsCount}</div>
+    </div>
+    <div class="control-stat-card busy-stat">
+      <div class="stat-label">🔴 Teams Busy</div>
+      <div class="stat-num" style="color:#f87171;">${busyTeamsCount}</div>
+    </div>
+    <div class="control-stat-card completed-stat">
+      <div class="stat-label">🏆 Completed Today</div>
+      <div class="stat-num" style="color:#60a5fa;">${completedTodayCount}</div>
     </div>
   `;
 }
+
 
 function renderEmergencies(root, data) {
   if (!data.length) {
@@ -1136,6 +1471,15 @@ export async function initTeamDashboard() {
           </div>
         </div>
 
+        <!-- Embedded Google Map -->
+        <div>
+          <div style="color:var(--text-muted); font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.35rem;">📍 Mission Location Map</div>
+          <div id="team-map" style="width:100%; height:220px; border-radius:8px; background:rgba(0,0,0,0.1); border:1px solid rgba(255,255,255,0.05); margin-bottom:0.5rem;"></div>
+          <button class="team-btn" id="btn-navigate-gmaps" style="width:100%; margin-top:0.25rem; background:linear-gradient(135deg,#3b82f6,#1d4ed8); border:none; font-weight:700; color:#ffffff; font-size:0.8rem; display:flex; align-items:center; justify-content:center; gap:0.4rem; padding:0.6rem 1rem; cursor:pointer; border-radius:8px;">
+            🚗 Navigate to Scene
+          </button>
+        </div>
+
         <div>
           <div style="color:var(--text-muted); font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.75rem;">Mission Progress Timeline</div>
           <div class="team-timeline-stepper" style="display:flex; gap:0.5rem; overflow-x:auto; padding-bottom:0.5rem;">
@@ -1181,6 +1525,42 @@ export async function initTeamDashboard() {
 
       </div>
     `;
+
+    // Render Google Map at scene
+    if (m.lat && m.lng) {
+      setTimeout(() => {
+        ensureGoogleMapsLoaded().then(() => {
+          const pos = { lat: parseFloat(m.lat), lng: parseFloat(m.lng) };
+          const mapEl = document.getElementById('team-map');
+          if (!mapEl) return;
+          const map = new google.maps.Map(mapEl, {
+            center: pos,
+            zoom: 15,
+            styles: MAP_DARK_STYLES,
+            disableDefaultUI: true,
+            zoomControl: true
+          });
+          new google.maps.Marker({
+            position: pos,
+            map: map,
+            title: m.incident_type,
+            animation: google.maps.Animation.DROP
+          });
+        }).catch(err => {
+          console.warn("Could not load Google Map in team details:", err);
+          const mapEl = document.getElementById('team-map');
+          if (mapEl) {
+            mapEl.innerHTML = `<div style="padding:1.5rem; text-align:center; color:var(--text-muted); font-size:0.75rem;">🗺️ Map offline (Google Maps API Key not set)</div>`;
+          }
+        });
+        
+        // Bind Navigate button click
+        document.getElementById('btn-navigate-gmaps')?.addEventListener('click', () => {
+          window.open(`https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lng}`, '_blank');
+        });
+      }, 50);
+    }
+
 
     // Distance computation and activation checks
     function checkDistanceAndRender() {
