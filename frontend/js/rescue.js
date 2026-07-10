@@ -704,28 +704,22 @@ function initFilters(root, statsEl) {
 }
 
 // ─── RESCUE TEAM DASHBOARD ──────────────────────────────────
-let teamData = [];
-let selectedEid = null;
-let simulatedLocation = null; // { lat, lng }
-let currentTeamUnit = null;   // Currently active unit filter
+let teamData       = [];
+let selectedEid    = null;
+let simulatedLocation = null;
+let currentTeamUnit   = null;   // Logged-in unit label
+let currentUnitId     = null;   // e.g. 'FIRE1'
+let currentPrimaryTeam = null;
 
-const ALL_UNITS = [
-  { label: 'Fire Unit 1',          icon: '🔥', primary: 'Fire Response Unit' },
-  { label: 'Fire Unit 2',          icon: '🔥', primary: 'Fire Response Unit' },
-  { label: 'Fire Unit 3',          icon: '🔥', primary: 'Fire Response Unit' },
-  { label: 'NDRF Unit A',          icon: '🌊', primary: 'Flood Rescue (NDRF)' },
-  { label: 'NDRF Unit B',          icon: '🌊', primary: 'Flood Rescue (NDRF)' },
-  { label: 'SDRF Unit 1',          icon: '🏗️', primary: 'SDRF Structural Response Team' },
-  { label: 'SDRF Unit 2',          icon: '🏗️', primary: 'SDRF Structural Response Team' },
-  { label: 'Hazmat Unit Alpha',    icon: '☢️', primary: 'Hazmat Response Unit' },
-  { label: 'Hazmat Unit Beta',     icon: '☢️', primary: 'Hazmat Response Unit' },
-  { label: 'ERT Unit 1',           icon: '🚑', primary: 'Emergency Response Team' },
-  { label: 'ERT Unit 2',           icon: '🚑', primary: 'Emergency Response Team' },
-  { label: 'EE Unit A',            icon: '⚡', primary: 'Electrical Emergency Unit' },
-  { label: 'EE Unit B',            icon: '⚡', primary: 'Electrical Emergency Unit' },
-  { label: 'Civic Crew 1',         icon: '🌳', primary: 'Civic Emergency Team' },
-  { label: 'Civic Crew 2',         icon: '🌳', primary: 'Civic Emergency Team' },
-];
+const UNIT_ICONS = {
+  'Fire Response Unit':           '🔥',
+  'Flood Rescue (NDRF)':          '🌊',
+  'SDRF Structural Response Team':'🏗️',
+  'Hazmat Response Unit':         '☢️',
+  'Emergency Response Team':      '🚑',
+  'Electrical Emergency Unit':    '⚡',
+  'Civic Emergency Team':         '🌳',
+};
 
 function getHaversineDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -740,123 +734,144 @@ function getHaversineDistance(lat1, lon1, lat2, lon2) {
 }
 
 export async function initTeamDashboard() {
-  const listEl    = document.getElementById('missions-list');
-  const detailsEl = document.getElementById('details-panel');
-  const selectorScreen  = document.getElementById('team-selector-screen');
-  const dashboardMain   = document.getElementById('dashboard-main');
-  const unitGrid        = document.getElementById('unit-grid');
-  const activeUnitLabel = document.getElementById('active-unit-label');
-  const switchBtn       = document.getElementById('btn-switch-team');
+  const listEl        = document.getElementById('missions-list');
+  const detailsEl     = document.getElementById('details-panel');
+  const loginScreen   = document.getElementById('login-screen');
+  const dashboardMain = document.getElementById('dashboard-main');
+  const loginForm     = document.getElementById('login-form');
+  const loginError    = document.getElementById('login-error');
+  const btnLogin      = document.getElementById('btn-login');
+  const btnLogout     = document.getElementById('btn-logout');
 
   if (!listEl) return;
 
-  // ── Build unit selector cards ──
-  if (unitGrid) {
-    unitGrid.innerHTML = ALL_UNITS.map(u => `
-      <button class="unit-select-btn" data-unit="${u.label}" style="
-        background: rgba(255,255,255,0.03);
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 10px;
-        padding: 0.85rem 1rem;
-        cursor: pointer;
-        color: var(--text-primary);
-        font-family: var(--font-sans);
-        display: flex;
-        align-items: center;
-        gap: 0.6rem;
-        transition: all 0.2s ease;
-        text-align: left;
-      ">
-        <span style="font-size:1.4rem;">${u.icon}</span>
-        <div>
-          <div style="font-weight:700; font-size:0.88rem;">${u.label}</div>
-          <div style="font-size:0.72rem; color:var(--text-muted);">${u.primary}</div>
-        </div>
-      </button>
-    `).join('');
-
-    document.querySelectorAll('.unit-select-btn').forEach(btn => {
-      btn.addEventListener('mouseenter', () => btn.style.borderColor = 'rgba(245,158,11,0.4)');
-      btn.addEventListener('mouseleave', () => btn.style.borderColor = 'rgba(255,255,255,0.08)');
-      btn.addEventListener('click', () => selectUnit(btn.dataset.unit));
-    });
+  // ── Restore session ──
+  const savedUnit  = sessionStorage.getItem('rescueTeamUnit');
+  const savedId    = sessionStorage.getItem('rescueUnitId');
+  const savedPrimary = sessionStorage.getItem('rescuePrimaryTeam');
+  if (savedUnit && savedId) {
+    currentTeamUnit    = savedUnit;
+    currentUnitId      = savedId;
+    currentPrimaryTeam = savedPrimary || '';
+    showDashboard();
   }
 
-  // ── Check sessionStorage for saved unit ──
-  const saved = sessionStorage.getItem('rescueTeamUnit');
-  if (saved) selectUnit(saved);
+  // ── Login form submit ──
+  loginForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const unitId = document.getElementById('unit-id-input')?.value.trim().toUpperCase();
+    const pin    = document.getElementById('unit-pin-input')?.value.trim();
+    if (!unitId || !pin) return;
 
-  // ── Switch team button ──
-  switchBtn?.addEventListener('click', () => {
-    sessionStorage.removeItem('rescueTeamUnit');
-    currentTeamUnit = null;
-    selectedEid = null;
-    selectorScreen.style.display = 'block';
-    dashboardMain.style.display  = 'none';
+    btnLogin.disabled = true;
+    btnLogin.textContent = '🔄 Verifying...';
+    loginError.style.display = 'none';
+
+    try {
+      const resp = await apiPost('/api/rescue/team/login', { unit_id: unitId, pin });
+      currentTeamUnit    = resp.unit_label;
+      currentUnitId      = resp.unit_id;
+      currentPrimaryTeam = resp.primary_team;
+      sessionStorage.setItem('rescueTeamUnit',    currentTeamUnit);
+      sessionStorage.setItem('rescueUnitId',      currentUnitId);
+      sessionStorage.setItem('rescuePrimaryTeam', currentPrimaryTeam);
+      showDashboard();
+    } catch (err) {
+      loginError.textContent = err.message || 'Login failed. Check your credentials.';
+      loginError.style.display = 'block';
+      btnLogin.disabled = false;
+      btnLogin.textContent = '🔓 Access Dashboard';
+    }
   });
 
-  function selectUnit(unitLabel) {
-    currentTeamUnit = unitLabel;
-    sessionStorage.setItem('rescueTeamUnit', unitLabel);
-    if (activeUnitLabel) activeUnitLabel.textContent = unitLabel;
-    selectorScreen.style.display = 'none';
-    dashboardMain.style.display  = 'block';
+  // ── Logout ──
+  btnLogout?.addEventListener('click', () => {
+    sessionStorage.removeItem('rescueTeamUnit');
+    sessionStorage.removeItem('rescueUnitId');
+    sessionStorage.removeItem('rescuePrimaryTeam');
+    currentTeamUnit = currentUnitId = currentPrimaryTeam = null;
+    selectedEid = null;
+    loginScreen.style.display  = 'flex';
+    dashboardMain.style.display = 'none';
+    if (btnLogin) { btnLogin.disabled = false; btnLogin.textContent = '🔓 Access Dashboard'; }
+    if (loginError) loginError.style.display = 'none';
+    document.getElementById('unit-id-input').value = '';
+    document.getElementById('unit-pin-input').value = '';
+  });
+
+  function showDashboard() {
+    loginScreen.style.display   = 'none';
+    dashboardMain.style.display = 'block';
+    // Set banner
+    const bannerLabel   = document.getElementById('banner-unit-label');
+    const bannerPrimary = document.getElementById('banner-primary-team');
+    const bannerIcon    = document.getElementById('banner-icon');
+    if (bannerLabel)   bannerLabel.textContent   = currentTeamUnit;
+    if (bannerPrimary) bannerPrimary.textContent  = currentPrimaryTeam;
+    if (bannerIcon)    bannerIcon.textContent     = UNIT_ICONS[currentPrimaryTeam] || '🚒';
     loadMissions();
+    // Auto-refresh every 30s
+    setInterval(loadMissions, 30000);
   }
 
   async function loadMissions() {
     try {
-      const emergencies = await apiGet('/api/rescue/emergencies');
-      
-      const priorityOrder = { 'critical': 0, 'high': 1, 'medium': 2, 'low': 3 };
-      teamData = emergencies.sort((a, b) => {
-        const pA = priorityOrder[a.severity.toLowerCase()] ?? 99;
-        const pB = priorityOrder[b.severity.toLowerCase()] ?? 99;
-        return pA - pB;
-      });
+      const resp = await apiGet(`/api/rescue/team/${encodeURIComponent(currentTeamUnit)}/missions`);
+      teamData = resp.missions || [];
 
-      // Filter: only show missions assigned to this unit and not closed
-      const activeMissions = teamData.filter(e =>
-        e.status !== 'Case Closed' &&
-        e.nearest_rescue_team === currentTeamUnit
-      );
-      
-      document.getElementById('mission-count').textContent = `${activeMissions.length} active`;
-      
-      if (!activeMissions.length) {
+      // Update workload banner
+      const chip = document.getElementById('workload-chip');
+      if (chip) {
+        const burden = resp.total_time_burden_minutes || 0;
+        const active = resp.active_count || 0;
+        chip.textContent = `${active} active · ${burden} min workload`;
+        chip.className   = 'workload-chip' + (burden > 30 ? ' busy' : '');
+      }
+      const cntEl = document.getElementById('mission-count');
+      if (cntEl) cntEl.textContent = `${teamData.length} missions`;
+
+      if (!teamData.length) {
         listEl.innerHTML = `
-          <div class="empty-state" style="padding: 2rem 1rem;">
+          <div class="empty-state" style="padding:2rem 1rem;">
             <div class="empty-icon">✅</div>
-            <p>No active missions assigned.</p>
+            <p>No missions assigned to your unit.</p>
           </div>`;
         detailsEl.innerHTML = `
-          <div class="empty-state" style="padding: 5rem 1rem;">
+          <div class="empty-state" style="padding:5rem 1rem;">
             <div class="empty-icon">🚒</div>
-            <h3>No Mission Selected</h3>
-            <p style="color:var(--text-muted); font-size:0.85rem; margin-top:0.5rem;">Select an active mission from the left panel to begin field operations.</p>
+            <h3>All Clear!</h3>
+            <p style="color:var(--text-muted); font-size:0.85rem; margin-top:0.5rem;">No active missions. The AI will dispatch cases here automatically.</p>
           </div>`;
         return;
       }
 
-      listEl.innerHTML = activeMissions.map(m => {
-        const activeClass = selectedEid === m.emergency_id ? 'active' : '';
+      // Render mission queue (read-only — AI-assigned, no manual picking)
+      listEl.innerHTML = teamData.map((m, idx) => {
         const sev = m.severity.toLowerCase();
-        
+        const isActive = idx === 0 || m.emergency_id === selectedEid;
+        const activeClass = m.emergency_id === selectedEid ? 'active' : '';
+        const autoTag = m.severity === 'Critical'
+          ? `<span style="font-size:0.65rem; background:rgba(239,68,68,0.15); color:#fca5a5; border:1px solid rgba(239,68,68,0.3); border-radius:20px; padding:0.1rem 0.5rem; margin-left:0.35rem;">AUTO</span>`
+          : '';
         return `
-          <div class="mission-item ${activeClass} border-severity-${sev}" data-eid="${m.emergency_id}" style="padding: 1rem; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-left: 4px solid var(--border-color, #fff); border-radius: 8px; cursor: pointer; transition: all 0.2s ease; margin-bottom: 0.5rem;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.35rem;">
-              <span style="font-weight: 700; font-family: monospace; color: var(--rescue-primary);">${m.emergency_id}</span>
+          <div class="mission-item ${activeClass} border-severity-${sev}" data-eid="${m.emergency_id}"
+            style="padding:1rem; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05);
+                   border-left:4px solid var(--border-color,#fff); border-radius:8px;
+                   cursor:pointer; transition:all 0.2s ease;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem;">
+              <span style="font-weight:700; font-family:monospace; color:var(--rescue-primary);">${m.emergency_id}${autoTag}</span>
               ${severityBadge(m.severity)}
             </div>
-            <div style="font-size: 0.9rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">${m.incident_type}</div>
-            <div style="font-size: 0.78rem; color: var(--text-muted); display: flex; justify-content: space-between; align-items:center;">
-              <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;">📍 ${m.landmark || 'No landmark'}</span>
-              <span>${statusBadge(m.status)}</span>
+            <div style="font-size:0.88rem; font-weight:700; color:var(--text-primary); margin-bottom:0.2rem;">${m.incident_type}</div>
+            <div style="font-size:0.75rem; color:var(--text-muted); display:flex; justify-content:space-between;">
+              <span>📍 ${m.landmark || 'No landmark'}</span>
+              ${statusBadge(m.status)}
             </div>
-          </div>
-        `;
+            ${m.response_time_minutes ? `<div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.25rem;">⏱ Est. ${m.response_time_minutes} min response</div>` : ''}
+          </div>`;
       }).join('');
 
+      // Click to view details
       document.querySelectorAll('.mission-item').forEach(item => {
         item.addEventListener('click', () => {
           selectedEid = item.dataset.eid;
@@ -866,9 +881,12 @@ export async function initTeamDashboard() {
         });
       });
 
-      if (selectedEid) {
-        renderDetails();
+      // Auto-display the top-priority mission (first in sorted list)
+      if (!selectedEid || !teamData.find(m => m.emergency_id === selectedEid)) {
+        selectedEid = teamData[0].emergency_id;
       }
+      document.querySelector(`.mission-item[data-eid="${selectedEid}"]`)?.classList.add('active');
+      renderDetails();
 
     } catch (err) {
       listEl.innerHTML = `

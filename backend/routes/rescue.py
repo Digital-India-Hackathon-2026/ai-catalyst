@@ -137,23 +137,46 @@ SUB_UNITS = {
 
 def get_least_loaded_unit(cursor, recommended_team: str) -> str:
     """
-    Finds the sub-unit under a primary response team with the lowest active emergency workload.
+    Finds the sub-unit with the lowest cumulative time burden.
+    Time burden = SUM of response_time_minutes for all active non-completed cases.
+    This ensures fair distribution based on how long current assignments will take.
     """
     units = SUB_UNITS.get(recommended_team, [recommended_team])
     if len(units) <= 1:
         return units[0]
-        
-    workloads = {}
+
+    burdens = {}
     for unit in units:
         cursor.execute("""
-            SELECT COUNT(*) FROM rescue_emergencies 
-            WHERE nearest_rescue_team = ? AND status NOT IN ('Mission Completed', 'Case Closed')
+            SELECT COALESCE(SUM(response_time_minutes), 0) FROM rescue_emergencies
+            WHERE nearest_rescue_team = ?
+              AND status NOT IN ('Mission Completed', 'Rescue Completed', 'Case Closed')
         """, (unit,))
-        workloads[unit] = cursor.fetchone()[0]
-        
-    # Find unit with minimum active tasks count
-    sorted_units = sorted(workloads.items(), key=lambda x: x[1])
+        burdens[unit] = cursor.fetchone()[0]
+
+    # Assign to unit with lowest total time burden
+    sorted_units = sorted(burdens.items(), key=lambda x: x[1])
     return sorted_units[0][0]
+
+
+# ─── Unit Credentials (hardcoded for prototype) ───
+UNIT_CREDENTIALS = {
+    'FIRE1':   {'unit_label': 'Fire Unit 1',       'primary': 'Fire Response Unit',           'pin': '1111'},
+    'FIRE2':   {'unit_label': 'Fire Unit 2',       'primary': 'Fire Response Unit',           'pin': '2222'},
+    'FIRE3':   {'unit_label': 'Fire Unit 3',       'primary': 'Fire Response Unit',           'pin': '3333'},
+    'NDRF_A':  {'unit_label': 'NDRF Unit A',       'primary': 'Flood Rescue (NDRF)',          'pin': '4444'},
+    'NDRF_B':  {'unit_label': 'NDRF Unit B',       'primary': 'Flood Rescue (NDRF)',          'pin': '5555'},
+    'SDRF1':   {'unit_label': 'SDRF Unit 1',       'primary': 'SDRF Structural Response Team','pin': '6666'},
+    'SDRF2':   {'unit_label': 'SDRF Unit 2',       'primary': 'SDRF Structural Response Team','pin': '7777'},
+    'HM_A':    {'unit_label': 'Hazmat Unit Alpha', 'primary': 'Hazmat Response Unit',         'pin': '8888'},
+    'HM_B':    {'unit_label': 'Hazmat Unit Beta',  'primary': 'Hazmat Response Unit',         'pin': '9999'},
+    'ERT1':    {'unit_label': 'ERT Unit 1',        'primary': 'Emergency Response Team',      'pin': '1212'},
+    'ERT2':    {'unit_label': 'ERT Unit 2',        'primary': 'Emergency Response Team',      'pin': '2121'},
+    'EE_A':    {'unit_label': 'EE Unit A',         'primary': 'Electrical Emergency Unit',    'pin': '3434'},
+    'EE_B':    {'unit_label': 'EE Unit B',         'primary': 'Electrical Emergency Unit',    'pin': '4343'},
+    'CIVIC1':  {'unit_label': 'Civic Crew 1',      'primary': 'Civic Emergency Team',         'pin': '5656'},
+    'CIVIC2':  {'unit_label': 'Civic Crew 2',      'primary': 'Civic Emergency Team',         'pin': '6565'},
+}
 
 
 def get_initial_status(severity: str) -> str:
@@ -183,17 +206,86 @@ def rescue_status():
     """Module health check."""
     return jsonify({
         "module": "Rescue & Emergency Response",
-        "version": "1.0.0",
-        "phase": "Phase 1 - MVP",
+        "version": "2.0.0",
+        "phase": "Phase 3 - Team Dashboard",
         "status": "Online",
         "endpoints": [
             "POST /api/rescue/submit",
+            "POST /api/rescue/team/login",
+            "GET  /api/rescue/team/<unit_label>/missions",
             "GET  /api/rescue/emergencies",
             "GET  /api/rescue/emergencies/<id>",
             "PATCH /api/rescue/emergencies/<id>",
             "GET  /api/rescue/track/<emergency_id>"
         ]
     })
+
+
+@rescue_bp.route('/api/rescue/team/login', methods=['POST'])
+def team_login():
+    """
+    Rescue team unit login using Unit ID + PIN.
+    Returns unit info on success.
+    """
+    data = request.json or {}
+    unit_id = (data.get('unit_id') or '').strip().upper()
+    pin     = (data.get('pin') or '').strip()
+
+    cred = UNIT_CREDENTIALS.get(unit_id)
+    if not cred:
+        return jsonify({'error': 'Unknown Unit ID. Check your credentials.'}), 401
+    if cred['pin'] != pin:
+        return jsonify({'error': 'Incorrect PIN. Please try again.'}), 401
+
+    return jsonify({
+        'unit_label': cred['unit_label'],
+        'primary_team': cred['primary'],
+        'unit_id': unit_id,
+        'authenticated': True
+    })
+
+
+@rescue_bp.route('/api/rescue/team/<path:unit_label>/missions', methods=['GET'])
+def team_missions(unit_label):
+    """
+    Returns all active missions assigned to a specific unit, sorted by priority.
+    Also includes the unit's total current time burden.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT * FROM rescue_emergencies
+            WHERE nearest_rescue_team = ?
+              AND status NOT IN ('Case Closed')
+            ORDER BY
+              CASE severity
+                WHEN 'Critical' THEN 1
+                WHEN 'High'     THEN 2
+                WHEN 'Medium'   THEN 3
+                ELSE 4
+              END,
+              submitted_at ASC
+        """, (unit_label,))
+        rows = [dict(r) for r in cursor.fetchall()]
+
+        # Calculate total time burden (active only)
+        cursor.execute("""
+            SELECT COALESCE(SUM(response_time_minutes), 0) FROM rescue_emergencies
+            WHERE nearest_rescue_team = ?
+              AND status NOT IN ('Mission Completed', 'Rescue Completed', 'Case Closed')
+        """, (unit_label,))
+        total_burden = cursor.fetchone()[0]
+        active_count = len([r for r in rows if r['status'] not in ('Mission Completed', 'Rescue Completed', 'Case Closed')])
+
+        return jsonify({
+            'unit_label': unit_label,
+            'missions': rows,
+            'active_count': active_count,
+            'total_time_burden_minutes': total_burden
+        })
+    finally:
+        conn.close()
 
 
 @rescue_bp.route('/api/rescue/submit', methods=['POST'])
