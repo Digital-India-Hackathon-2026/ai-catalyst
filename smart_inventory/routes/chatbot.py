@@ -19,6 +19,7 @@ if os.path.exists(env_path):
                 os.environ[k] = v.strip(' "\'')
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 @chatbot_bp.route('/api/chat', methods=['POST'])
@@ -82,9 +83,97 @@ def chat():
     conn.close()
 
     # 2. Build System Prompt
-    system_prompt = f"""You are the "ASHA AI Assistant", a professional and highly helpful assistant built directly into the ASHA Inventory System.
-Your job is to help ASHA workers manage their medicine inventory, answer health questions, and guide them on using the system.
-You MUST be concise, professional, and use a friendly tone. You can use markdown for formatting (bullet points, bold text).
+    system_prompt = f"""You are ASHA AI Assistant.
+
+========================
+CRITICAL LANGUAGE RULE
+========================
+
+This rule has the highest priority and must NEVER be ignored.
+
+For EVERY user message:
+
+Step 1:
+Detect the language of the user's latest message.
+
+Step 2:
+Reply ONLY in that language.
+
+Rules:
+
+• English input → Reply ONLY in English.
+• Telugu input → Reply ONLY in Telugu.
+
+
+Never translate your answer into another language unless the user explicitly asks.
+
+Never answer in Telugu if the user's message is completely in English.
+
+Never answer in English if the user's message is completely in Telugu.
+
+If the message mixes languages, determine which language is dominant.
+Reply only in the dominant language.
+
+Examples
+
+User:
+How many ORS packets are available?
+
+Assistant:
+There are 24 ORS packets currently available.
+
+----------------------
+
+User:
+నాకు జ్వరం వచ్చింది.
+
+Assistant:
+మీకు జ్వరం ఉంటే, దయచేసి సమీప ఆరోగ్య కేంద్రాన్ని సంప్రదించండి. అవసరమైతే వైద్యుడి సూచన మేరకు మందులు వాడండి.
+
+----------------------
+
+User:
+Paracetamol stock ఎంత ఉంది?
+
+Assistant:
+మీ దగ్గర ప్రస్తుతం 120 Paracetamol మాత్రలు ఉన్నాయి.
+
+========================
+ROLE
+========================
+
+You are an assistant for ASHA workers.
+
+Help with:
+
+• Medicine inventory
+• Stock availability
+• Medicine requests
+• Patient medicine distribution
+• Government health schemes
+• Basic medicine information
+
+========================
+RESPONSE STYLE
+========================
+
+• Keep answers short.
+• Be polite.
+• Use simple language.
+• Never switch languages.
+• Follow only the language of the latest user message.
+
+========================
+MEDICAL SAFETY
+========================
+
+Do not diagnose diseases.
+
+Do not prescribe medicines.
+
+Provide general health information only.
+
+For emergencies, advise visiting the nearest PHC or hospital.
 
 ---
 REAL-TIME DATA CONTEXT FOR THE CURRENT ASHA WORKER (Village: {village})
@@ -102,11 +191,6 @@ DISTRIBUTED TODAY:
 PENDING REQUESTS:
 {chr(10).join(req_details) if req_details else "No pending medicine requests."}
 ---
-
-Rules:
-1. Always base your inventory answers on the context above.
-2. If asked how to do something in the app (e.g., "How do I request medicines?"), guide them to click the buttons like "Give Medicine" or "Ask for More" in the sidebar or dashboard.
-3. Keep responses brief but informative.
 """
 
     # 3. Call Groq API
@@ -143,3 +227,99 @@ Rules:
     except Exception as e:
         print(f"Chatbot Exception: {str(e)}")
         return jsonify({"error": "An unexpected error occurred."}), 500
+
+@chatbot_bp.route('/api/transcribe', methods=['POST'])
+def transcribe_audio():
+    if 'role' not in session or session.get('role') != 'asha':
+        return jsonify({"error": "Unauthorized"}), 403
+
+    if 'audio' not in request.files:
+        return jsonify({"error": "No audio file provided"}), 400
+
+    audio_file = request.files['audio']
+    audio_data = audio_file.read()
+
+    # Manually construct multipart/form-data for urllib
+    import uuid
+    boundary = uuid.uuid4().hex
+    
+    body = b''
+    # File part
+    body += f"--{boundary}\r\n".encode('utf-8')
+    body += f'Content-Disposition: form-data; name="file"; filename="recording.webm"\r\n'.encode('utf-8')
+    body += f'Content-Type: audio/webm\r\n\r\n'.encode('utf-8')
+    body += audio_data + b'\r\n'
+    
+    # Model part
+    body += f"--{boundary}\r\n".encode('utf-8')
+    body += f'Content-Disposition: form-data; name="model"\r\n\r\n'.encode('utf-8')
+    body += f'whisper-large-v3-turbo\r\n'.encode('utf-8')
+
+    # Prompt part to force Telugu/English scripts
+    body += f"--{boundary}\r\n".encode('utf-8')
+    body += f'Content-Disposition: form-data; name="prompt"\r\n\r\n'.encode('utf-8')
+    body += f'Hello. నమస్కారం. నాకు మందులు కావాలి. I need medicines. (Please use Telugu script for Telugu words, do not use Hindi Devanagari).\r\n'.encode('utf-8')
+    
+    body += f"--{boundary}--\r\n".encode('utf-8')
+
+    req = urllib.request.Request(
+        "https://api.groq.com/openai/v1/audio/transcriptions",
+        data=body,
+        headers={
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "User-Agent": "Mozilla/5.0"
+        },
+        method="POST"
+    )
+
+    try:
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            return jsonify({"text": result.get("text", "")})
+    except urllib.error.HTTPError as e:
+        error_msg = e.read().decode('utf-8')
+        print(f"Groq Audio API Error: {error_msg}")
+        return jsonify({"error": "Voice recognition currently unavailable."}), 500
+    except Exception as e:
+        print(f"Audio Exception: {str(e)}")
+        return jsonify({"error": "An unexpected error occurred during transcription."}), 500
+
+from flask import Response
+
+@chatbot_bp.route('/api/synthesize', methods=['POST'])
+def synthesize_audio():
+    if 'role' not in session or session.get('role') != 'asha':
+        return jsonify({"error": "Unauthorized"}), 403
+
+    if not DEEPGRAM_API_KEY:
+        return jsonify({"error": "Deepgram API key not configured in .env file."}), 500
+
+    data = request.json
+    if not data or 'text' not in data:
+        return jsonify({"error": "No text provided"}), 400
+
+    text = data.get("text", "").strip()
+    
+    # Strip basic markdown for cleaner speech reading
+    clean_text = text.replace('*', '').replace('#', '').strip()
+
+    payload = json.dumps({"text": clean_text}).encode('utf-8')
+
+    req = urllib.request.Request(
+        "https://api.deepgram.com/v1/speak?model=aura-asteria-en",
+        data=payload,
+        headers={
+            "Authorization": f"Token {DEEPGRAM_API_KEY}",
+            "Content-Type": "application/json"
+        },
+        method="POST"
+    )
+
+    try:
+        response = urllib.request.urlopen(req)
+        audio_data = response.read()
+        return Response(audio_data, mimetype="audio/mpeg")
+    except Exception as e:
+        print(f"Deepgram TTS Exception: {str(e)}")
+        return jsonify({"error": "Failed to generate speech via Deepgram."}), 500
