@@ -1,10 +1,15 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
+from dotenv import load_dotenv
 from config import Config
 from routes.civic import civic_bp
 from routes.rescue import rescue_bp
 from routes.medical import medical_bp
 from db import init_db
+import os
+
+# Load environment variables from .env file
+load_dotenv()
 
 def create_app():
     app = Flask(__name__)

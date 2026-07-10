@@ -312,7 +312,7 @@ function switchView(viewId) {
 function initSubmissionMap() {
   if (submitMap) return; // already initialized
   
-  // Default to Hyderabad center
+  // Default to Hyderabad center (fallback only — replaced by live GPS below)
   const defaultLat = 17.3850;
   const defaultLng = 78.4867;
   
@@ -321,7 +321,7 @@ function initSubmissionMap() {
     attribution: '© OpenStreetMap'
   }).addTo(submitMap);
   
-  // Set default coordinates
+  // Set default coordinates (temporary — overridden by auto-detect below)
   document.getElementById("comp-lat").value = defaultLat;
   document.getElementById("comp-lng").value = defaultLng;
   document.getElementById("coordinates-display").innerHTML = `Lat: ${defaultLat}, Lng: ${defaultLng}`;
@@ -337,8 +337,23 @@ function initSubmissionMap() {
     submitMarker.setLatLng(e.latlng);
     updateCoords(e.latlng.lat, e.latlng.lng);
   });
+
+  // Auto-detect user's live GPS location on map load
+  // This immediately replaces the hardcoded default with the user's real position
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      submitMap.setView([lat, lng], 15);
+      submitMarker.setLatLng([lat, lng]);
+      updateCoords(lat, lng);
+    }, () => {
+      // Silently fall back to default if auto-detect fails on load
+      console.log("Auto-detect on load failed — using default map center.");
+    }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+  }
   
-  // Geolocation trigger
+  // Manual geolocation trigger (Auto-Detect button)
   document.getElementById("btn-geolocation").addEventListener("click", () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((pos) => {
@@ -349,7 +364,7 @@ function initSubmissionMap() {
         updateCoords(lat, lng);
       }, () => {
         alert("Geolocation retrieval failed. Please click coordinates manually.");
-      });
+      }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
     } else {
       alert("Geolocation is not supported by your browser.");
     }
@@ -388,66 +403,329 @@ function initSubmissionMap() {
   descInput.addEventListener("input", queryAIHeuristic);
   categoryInput.addEventListener("change", queryAIHeuristic);
 
-  // File image input Base64 parsing
+  // --- CAMERA AND UPLOAD FUNCTIONALITY ---
+  let tempImageBase64 = null;
+  let confirmedImageBase64 = null;
+  let localStream = null;
+
   const fileInput = document.getElementById("comp-file-input");
-  const uploadTrigger = document.getElementById("image-upload-trigger");
+  const cameraInput = document.getElementById("comp-camera-input");
   const uploadPrompt = document.getElementById("upload-prompt");
   const uploadPreview = document.getElementById("upload-preview-img");
-  
-  uploadTrigger.addEventListener("click", () => fileInput.click());
-  
+
+  const showImageError = (msg) => {
+    const errorSpan = document.getElementById("image-validation-msg");
+    errorSpan.textContent = ` (${msg})`;
+    errorSpan.style.display = "inline";
+    
+    // Reset image state
+    tempImageBase64 = null;
+    confirmedImageBase64 = null;
+    uploadPreview.style.display = "none";
+    uploadPrompt.style.display = "block";
+    document.getElementById("image-action-controls").style.display = "none";
+    document.getElementById("image-status-message").style.display = "none";
+  };
+
+  const hideImageError = () => {
+    document.getElementById("image-validation-msg").style.display = "none";
+  };
+
+  const setTempImage = (dataUrl) => {
+    tempImageBase64 = dataUrl;
+    confirmedImageBase64 = null; // reset confirmed state until they click Confirm
+    
+    uploadPreview.src = dataUrl;
+    uploadPreview.style.display = "block";
+    uploadPrompt.style.display = "none";
+    
+    // Show action controls (Confirm / Remove)
+    document.getElementById("image-action-controls").style.display = "flex";
+    document.getElementById("image-status-message").style.display = "none";
+    hideImageError();
+  };
+
+  const validateAndLoadImage = (file) => {
+    // 1. Validate format
+    const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    if (!validTypes.includes(file.type)) {
+      showImageError("Unsupported format. Please upload JPG, PNG or WEBP.");
+      return;
+    }
+    // 2. Validate size (10 MB limit)
+    const maxSize = 10 * 1024 * 1024; // 10 MB
+    if (file.size > maxSize) {
+      showImageError("Image size exceeds 10 MB.");
+      return;
+    }
+
+    hideImageError();
+
+    // Read and load
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setTempImage(event.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const triggerAIAnalysis = async (dataUrl) => {
+    const descTextarea = document.getElementById("comp-desc");
+    const loadingIndicator = document.getElementById("ai-desc-loading");
+
+    // Show loading indicator while AI analyses
+    loadingIndicator.style.display = "inline";
+    descTextarea.placeholder = "Generating description...";
+    descTextarea.disabled = true;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/civic/analyze-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: dataUrl })
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        // Auto-populate description with AI-generated text
+        descTextarea.value = data.description;
+        descTextarea.placeholder = "Detail the complaint...";
+      } else {
+        // AI couldn't identify the issue — show fallback message
+        descTextarea.value = "";
+        descTextarea.placeholder = data.message || "Unable to generate an accurate description. Please enter the complaint manually.";
+      }
+    } catch (err) {
+      console.error("AI image analysis error:", err);
+      descTextarea.value = "";
+      descTextarea.placeholder = "Unable to generate an accurate description. Please enter the complaint manually.";
+    } finally {
+      // Always hide loading indicator and re-enable textarea
+      loadingIndicator.style.display = "none";
+      descTextarea.disabled = false;
+    }
+  };
+
+  const confirmComplaintImage = () => {
+    if (!tempImageBase64) return;
+    confirmedImageBase64 = tempImageBase64;
+    
+    document.getElementById("image-action-controls").style.display = "none";
+    document.getElementById("image-status-message").style.display = "block";
+    hideImageError();
+    
+    // Trigger AI analysis automatically
+    triggerAIAnalysis(confirmedImageBase64);
+  };
+
+  // Webcam modal stream methods for desktop
+  const openWebcam = async () => {
+    const modal = document.getElementById("camera-modal");
+    const video = document.getElementById("webcam-video");
+    const streamContainer = document.getElementById("camera-stream-container");
+    const previewContainer = document.getElementById("camera-preview-container");
+    const captureBtn = document.getElementById("btn-capture-snap");
+    const confirmBtn = document.getElementById("btn-confirm-snap");
+    const retakeBtn = document.getElementById("btn-retake-snap");
+
+    // Reset modal view
+    streamContainer.style.display = "block";
+    previewContainer.style.display = "none";
+    captureBtn.style.display = "inline-flex";
+    confirmBtn.style.display = "none";
+    retakeBtn.style.display = "none";
+    modal.style.display = "flex";
+
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" }
+      });
+      video.srcObject = localStream;
+    } catch (err) {
+      console.error("Error accessing webcam:", err);
+      alert("Could not access webcam/camera stream directly. Falling back to native file explorer/camera capture.");
+      modal.style.display = "none";
+      cameraInput.click();
+    }
+  };
+
+  const closeWebcam = () => {
+    const modal = document.getElementById("camera-modal");
+    modal.style.display = "none";
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      localStream = null;
+    }
+    const video = document.getElementById("webcam-video");
+    video.srcObject = null;
+  };
+
+  // Bind Buttons
+  document.getElementById("btn-take-photo").addEventListener("click", () => {
+    const isMobile = /Mobi|Android|iPhone|iPad|Macintosh/i.test(navigator.userAgent) && 'ontouchstart' in window;
+    if (isMobile) {
+      cameraInput.click();
+    } else {
+      openWebcam();
+    }
+  });
+
+  document.getElementById("btn-upload-photo").addEventListener("click", () => {
+    fileInput.click();
+  });
+
   fileInput.addEventListener("change", (e) => {
     const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        uploadPreview.src = event.target.result;
-        uploadPreview.style.display = "block";
-        uploadPrompt.style.display = "none";
-      };
-      reader.readAsDataURL(file);
-    }
+    if (file) validateAndLoadImage(file);
+  });
+
+  cameraInput.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) validateAndLoadImage(file);
+  });
+
+  document.getElementById("btn-confirm-image").addEventListener("click", () => {
+    confirmComplaintImage();
+  });
+
+  document.getElementById("btn-remove-image").addEventListener("click", () => {
+    tempImageBase64 = null;
+    confirmedImageBase64 = null;
+    
+    uploadPreview.src = "";
+    uploadPreview.style.display = "none";
+    uploadPrompt.style.display = "block";
+    
+    document.getElementById("image-action-controls").style.display = "none";
+    document.getElementById("image-status-message").style.display = "none";
+    
+    fileInput.value = "";
+    cameraInput.value = "";
+    hideImageError();
+  });
+
+  // Modal actions
+  document.getElementById("btn-close-camera-modal").addEventListener("click", () => {
+    closeWebcam();
+  });
+
+  document.getElementById("btn-capture-snap").addEventListener("click", () => {
+    const video = document.getElementById("webcam-video");
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    const dataUrl = canvas.toDataURL("image/jpeg");
+    const previewImg = document.getElementById("webcam-preview-img");
+    previewImg.src = dataUrl;
+    
+    document.getElementById("camera-stream-container").style.display = "none";
+    document.getElementById("camera-preview-container").style.display = "block";
+    
+    document.getElementById("btn-capture-snap").style.display = "none";
+    document.getElementById("btn-confirm-snap").style.display = "inline-flex";
+    document.getElementById("btn-retake-snap").style.display = "inline-flex";
+  });
+
+  document.getElementById("btn-retake-snap").addEventListener("click", () => {
+    document.getElementById("camera-stream-container").style.display = "block";
+    document.getElementById("camera-preview-container").style.display = "none";
+    
+    document.getElementById("btn-capture-snap").style.display = "inline-flex";
+    document.getElementById("btn-confirm-snap").style.display = "none";
+    document.getElementById("btn-retake-snap").style.display = "none";
+  });
+
+  document.getElementById("btn-confirm-snap").addEventListener("click", () => {
+    const previewImg = document.getElementById("webcam-preview-img");
+    setTempImage(previewImg.src);
+    closeWebcam();
+    confirmComplaintImage();
   });
 
   // Form Submit Action
   document.getElementById("complaint-form").onsubmit = async (e) => {
     e.preventDefault();
-    
+
+    // Prevent submission if no image is confirmed
+    if (!confirmedImageBase64) {
+      showImageError("Please select/capture an image and click Confirm Photo.");
+      alert("A confirmed image is required to submit a complaint.");
+      return;
+    }
+
     const title = document.getElementById("comp-title").value.trim();
     const category = document.getElementById("comp-category").value;
     const description = document.getElementById("comp-desc").value.trim();
     const priority = document.getElementById("comp-priority").value;
-    const lat = parseFloat(document.getElementById("comp-lat").value);
-    const lng = parseFloat(document.getElementById("comp-lng").value);
-    const image_path = uploadPreview.src || null;
-    
-    try {
-      const res = await fetch(`${API_BASE}/api/civic/complaints`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title, category, description, priority, lat, lng, image_path,
-          citizen_id: currentUser.id
-        })
-      });
-      
-      const data = await res.json();
-      if (res.ok) {
-        alert("Grievance submitted successfully to Municipal Office!");
-        // Reset form & view history
-        document.getElementById("complaint-form").reset();
-        uploadPreview.style.display = "none";
-        uploadPrompt.style.display = "block";
-        uploadPreview.removeAttribute('src');
-        switchView("complaints-list");
-        loadComplaintsList();
-      } else {
-        alert(data.error || "Submission failed");
+    const image_path = confirmedImageBase64;
+
+    // --- AUTO GPS LOCATION CAPTURE ---
+    // Wraps the existing submission in a geolocation promise.
+    // On success: GPS coords override map-picked values before submit.
+    // On denial: block submission and show a message.
+    const captureLocationAndSubmit = async (lat, lng) => {
+      // Update hidden inputs and display with captured GPS coordinates
+      document.getElementById("comp-lat").value = lat;
+      document.getElementById("comp-lng").value = lng;
+      updateCoords(lat, lng);
+
+      try {
+        const res = await fetch(`${API_BASE}/api/civic/complaints`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title, category, description, priority, lat, lng, image_path,
+            citizen_id: currentUser.id
+          })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          alert("Grievance submitted successfully to Municipal Office!");
+          // Reset form & view history
+          document.getElementById("complaint-form").reset();
+          uploadPreview.style.display = "none";
+          uploadPrompt.style.display = "block";
+          uploadPreview.removeAttribute('src');
+          tempImageBase64 = null;
+          confirmedImageBase64 = null;
+          document.getElementById("image-action-controls").style.display = "none";
+          document.getElementById("image-status-message").style.display = "none";
+          fileInput.value = "";
+          cameraInput.value = "";
+          switchView("complaints-list");
+          loadComplaintsList();
+        } else {
+          alert(data.error || "Submission failed");
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Error sending request to server.");
       }
-    } catch (err) {
-      console.error(err);
-      alert("Error sending request to server.");
+    };
+
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser.");
+      return;
     }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        // Permission granted — capture GPS coords
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        captureLocationAndSubmit(lat, lng);
+      },
+      () => {
+        // Permission denied or unavailable — block submission
+        alert("Location access is required to submit a complaint.");
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
   };
 }
 

@@ -2,6 +2,8 @@ from flask import Blueprint, request, jsonify
 from db import get_db_connection
 from datetime import datetime, timedelta
 import math
+import os
+import groq as groq_sdk
 
 civic_bp = Blueprint('civic', __name__)
 
@@ -161,6 +163,94 @@ def suggest_priority():
         "confidence": confidence,
         "reasons": reasons
     })
+
+
+# ----------------- AI IMAGE ANALYSIS ENDPOINT -----------------
+
+def _get_groq_client():
+    """Returns a Groq client using the API key from environment variables."""
+    api_key = os.environ.get('GROQ_API_KEY')
+    if not api_key:
+        raise ValueError("GROQ_API_KEY is not set in environment variables.")
+    return groq_sdk.Groq(api_key=api_key)
+
+
+@civic_bp.route('/api/civic/analyze-image', methods=['POST'])
+def analyze_complaint_image():
+    """
+    Accepts a base64-encoded image, sends it to Groq Vision model,
+    and returns a professional civic complaint description.
+    The API key is read server-side from environment variables only.
+    """
+    data = request.json or {}
+    image_data_url = data.get('image')  # full data URL: data:image/jpeg;base64,...
+
+    if not image_data_url:
+        return jsonify({"error": "No image provided"}), 400
+
+    # Validate it is a data URL with base64 content
+    if not image_data_url.startswith('data:image/'):
+        return jsonify({"error": "Invalid image format. Expected a base64 data URL."}), 400
+
+    prompt = """You are a civic complaint assistant for a municipal government portal.
+
+Analyze the uploaded image and identify if it contains any of the following civic issues:
+- Pothole or Road Damage
+- Garbage Dump or Illegal Dumping
+- Water Leakage or Pipeline Burst
+- Drainage Overflow or Blocked Drain
+- Broken or Non-functional Street Light
+- Fallen Tree or Broken Branch
+- Damaged Footpath or Pavement
+- Traffic Signal Damage
+- Stray Animals
+- Public Property Damage
+- Any other civic infrastructure issue
+
+If you can confidently identify a civic issue in the image, respond with ONLY a professional complaint description in 2-3 sentences. The description must:
+- Be factual and based only on what is visible in the image
+- Be grammatically correct with no spelling errors
+- Be formal and suitable for submission to a government department
+- Never invent or assume details not visible in the image
+- Start directly with the issue description (no preamble like 'The image shows...')
+
+If you cannot confidently identify a civic issue, respond with exactly this text and nothing else:
+UNABLE_TO_IDENTIFY"""
+
+    try:
+        client = _get_groq_client()
+        completion = client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": image_data_url}}
+                    ]
+                }
+            ],
+            max_tokens=300,
+            temperature=0.2
+        )
+
+        generated_text = completion.choices[0].message.content.strip()
+
+        if generated_text == "UNABLE_TO_IDENTIFY" or not generated_text:
+            return jsonify({
+                "success": False,
+                "message": "Unable to generate an accurate description. Please enter the complaint manually."
+            })
+
+        return jsonify({
+            "success": True,
+            "description": generated_text
+        })
+
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": f"AI analysis failed: {str(e)}"}), 500
 
 
 # ----------------- COMPLAINTS ENDPOINTS -----------------
