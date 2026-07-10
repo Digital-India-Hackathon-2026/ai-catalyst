@@ -358,26 +358,34 @@ def track_emergency(eid):
     Citizen-facing endpoint: returns emergency + status progress for the 7-step tracker.
     """
     TRACKING_STEPS = [
-        'Complaint Submitted',
-        'AI Analysis Complete',
+        'Complaint Received',
+        'AI Analysis Completed',
         'Team Assigned',
-        'Team Dispatched',
-        'Team Arrived',
-        'Rescue Completed',
-        'Case Closed',
+        'Mission Accepted',
+        'Start Journey',
+        'Reached Location',
+        'Rescue in Progress',
+        'Mission Completed'
     ]
 
     STATUS_TO_STEP = {
+        'Complaint Received':           0,
         'Complaint Submitted':          0,
+        'AI Analysis Completed':        1,
         'AI Analysis Complete':         1,
         'Pending Supervisor Approval':  1,
         'Pending Review':               1,
-        'Auto Dispatched':              3,
+        'Auto Dispatched':              2,
         'Team Assigned':                2,
-        'Team Dispatched':              3,
-        'Team Arrived':                 4,
-        'Rescue Completed':             5,
-        'Case Closed':                  6,
+        'Mission Accepted':             3,
+        'Start Journey':                4,
+        'Team Dispatched':              4,
+        'Reached Location':             5,
+        'Team Arrived':                 5,
+        'Rescue in Progress':           6,
+        'Mission Completed':            7,
+        'Rescue Completed':             7,
+        'Case Closed':                  7
     }
 
     conn = get_db_connection()
