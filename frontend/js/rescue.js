@@ -537,17 +537,17 @@ function buildEmergencyCard(e) {
 
   let actionsHTML = '';
   if (e.status === 'Case Closed') {
-    actionsHTML = statusBadge(e.status);
+    actionsHTML = `<div style="display:flex;align-items:center;gap:0.5rem;">${statusBadge(e.status)}</div>`;
   } else {
+    // Only show action buttons for cases that need supervisor decision
     let buttonsHTML = '';
     if (e.status === 'Pending Supervisor Approval' || e.status === 'Pending Review') {
       buttonsHTML = `
         <button class="btn-ec-approve" data-eid="${e.emergency_id}" data-action="approve">✅ Approve</button>
         <button class="btn-ec-close"   data-eid="${e.emergency_id}" data-action="close">✖ Close</button>
       `;
-    } else {
-      buttonsHTML = statusBadge(e.status);
     }
+    // For all other statuses, left side is empty — status dropdown on right is the single source of truth
 
     const statuses = [
       'Complaint Submitted',
@@ -556,13 +556,15 @@ function buildEmergencyCard(e) {
       'Pending Review',
       'Auto Dispatched',
       'Team Assigned',
-      'Team Dispatched',
-      'Team Arrived',
-      'Rescue Completed',
+      'Mission Accepted',
+      'Start Journey',
+      'Reached Location',
+      'Rescue in Progress',
+      'Mission Completed',
       'Case Closed'
     ];
 
-    const options = statuses.map(st => 
+    const options = statuses.map(st =>
       `<option value="${st}" ${e.status === st ? 'selected' : ''}>${st}</option>`
     ).join('');
 
