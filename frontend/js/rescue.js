@@ -706,6 +706,19 @@ function initFilters(root, statsEl) {
 // ─── RESCUE TEAM DASHBOARD ──────────────────────────────────
 let teamData = [];
 let selectedEid = null;
+let simulatedLocation = null; // { lat, lng }
+
+function getHaversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Radius of the earth in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Distance in km
+}
 
 export async function initTeamDashboard() {
   const listEl = document.getElementById('missions-list');
@@ -920,6 +933,12 @@ export async function initTeamDashboard() {
           </div>
         </div>
 
+        <!-- Geolocation Tracker Box -->
+        <div id="distance-tracker-box" style="margin-bottom: 0.5rem; font-size: 0.82rem; padding: 0.6rem 0.85rem; background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.15); border-radius: 8px; display: none; justify-content: space-between; align-items: center; flex-wrap:wrap; gap: 0.5rem;">
+          <span>📍 <strong>Distance to scene:</strong> <span id="distance-value">Checking GPS...</span></span>
+          <button class="team-btn btn-secondary" id="btn-simulate-gps" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; margin: 0; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);">🎯 Simulate GPS at Scene</button>
+        </div>
+
         <div>
           <div style="color:var(--text-muted); font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.5rem;">Perform Actions</div>
           <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.75rem; flex-wrap:wrap;">
@@ -930,7 +949,7 @@ export async function initTeamDashboard() {
             <button class="team-btn ${btnJourneyActive}" id="act-journey" data-status="Start Journey">
               ⚡ Start Journey
             </button>
-            <button class="team-btn ${btnArrivedActive}" id="act-arrived" data-status="Reached Location">
+            <button class="team-btn btn-disabled" id="act-arrived" data-status="Reached Location" disabled>
               📍 Reached Location
             </button>
             <button class="team-btn ${btnProgressActive}" id="act-progress" data-status="Rescue in Progress">
@@ -952,6 +971,73 @@ export async function initTeamDashboard() {
 
       </div>
     `;
+
+    // Distance computation and activation checks
+    function checkDistanceAndRender() {
+      const distBox = document.getElementById('distance-tracker-box');
+      const distValEl = document.getElementById('distance-value');
+      const actArrivedBtn = document.getElementById('act-arrived');
+      
+      if (!m.lat || !m.lng) {
+        if (distBox) distBox.style.display = 'none';
+        if (actArrivedBtn && (m.status === 'Start Journey' || m.status === 'Team Dispatched')) {
+          actArrivedBtn.className = 'team-btn btn-active';
+          actArrivedBtn.removeAttribute('disabled');
+        }
+        return;
+      }
+      
+      if (distBox) distBox.style.display = 'flex';
+      
+      // Default to Hyderabad center if no GPS yet
+      let crewLat = 17.3850;
+      let crewLng = 78.4867;
+      
+      if (simulatedLocation) {
+        crewLat = simulatedLocation.lat;
+        crewLng = simulatedLocation.lng;
+      } else if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(pos => {
+          if (!simulatedLocation) {
+            crewLat = pos.coords.latitude;
+            crewLng = pos.coords.longitude;
+            updateDistance(crewLat, crewLng);
+          }
+        }, err => {
+          updateDistance(crewLat, crewLng);
+        });
+        return;
+      }
+      
+      updateDistance(crewLat, crewLng);
+      
+      function updateDistance(clat, clng) {
+        const dist = getHaversineDistance(clat, clng, m.lat, m.lng);
+        const nearScene = dist <= 0.15; // 150m
+        
+        if (distValEl) {
+          if (nearScene) {
+            distValEl.innerHTML = `<span style="color:var(--color-success); font-weight:700;">📍 Arrived (${(dist*1000).toFixed(0)}m away)</span>`;
+            if (distBox) distBox.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+          } else {
+            distValEl.textContent = `${dist.toFixed(2)} km away`;
+            if (distBox) distBox.style.borderColor = 'rgba(59, 130, 246, 0.15)';
+          }
+        }
+        
+        if (actArrivedBtn) {
+          if (m.status === 'Start Journey' || m.status === 'Team Dispatched') {
+            if (nearScene) {
+              actArrivedBtn.className = 'team-btn btn-active';
+              actArrivedBtn.removeAttribute('disabled');
+            } else {
+              actArrivedBtn.className = 'team-btn btn-disabled';
+              actArrivedBtn.setAttribute('disabled', 'true');
+            }
+          }
+        }
+      }
+    }
 
     document.querySelectorAll('.team-btn[data-status]').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -980,6 +1066,14 @@ export async function initTeamDashboard() {
 
     document.getElementById('act-contact')?.addEventListener('click', () => {
       alert('📞 Control Room Emergency Hotline: +91 40-23456789 (GovConnect HQ)');
+    });
+
+    checkDistanceAndRender();
+
+    document.getElementById('btn-simulate-gps')?.addEventListener('click', () => {
+      simulatedLocation = { lat: m.lat, lng: m.lng };
+      showToast('GPS simulated at incident location!', 'success');
+      checkDistanceAndRender();
     });
   }
 
