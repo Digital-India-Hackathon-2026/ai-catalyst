@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     const fab = document.getElementById('chatbot-fab');
-    const window = document.getElementById('chatbot-window');
+    const chatWindow = document.getElementById('chatbot-window');
     const closeBtn = document.getElementById('chatbot-close-btn');
     const clearBtn = document.getElementById('chatbot-clear-btn');
     const overlay = document.getElementById('chatbot-overlay');
@@ -15,12 +15,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Toggle Chatbot
     const toggleChat = () => {
-        const isActive = window.classList.contains('active');
+        const isActive = chatWindow.classList.contains('active');
         if (isActive) {
-            window.classList.remove('active');
+            chatWindow.classList.remove('active');
             overlay.classList.remove('active');
         } else {
-            window.classList.add('active');
+            chatWindow.classList.add('active');
             if (document.body.clientWidth <= 480) {
                 overlay.classList.add('active');
             }
