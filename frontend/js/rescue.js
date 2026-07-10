@@ -274,6 +274,14 @@ function renderResultPage(e, root) {
             <div class="value">${e.response_time_minutes} min</div>
           </div>
           <div class="result-meta-item">
+            <div class="label">🏢 Depts Involved</div>
+            <div class="value" style="font-size:0.82rem;">${e.recommended_departments || 'N/A'}</div>
+          </div>
+          <div class="result-meta-item">
+            <div class="label">📍 Nearest Team</div>
+            <div class="value" style="font-size:0.82rem;">${e.nearest_rescue_team || 'N/A'}</div>
+          </div>
+          <div class="result-meta-item">
             <div class="label">📍 Location</div>
             <div class="value" style="font-size:0.82rem;">${e.landmark || (e.lat ? `${e.lat}, ${e.lng}` : 'Not specified')}</div>
           </div>
@@ -417,6 +425,14 @@ function renderTrackingPage(data, root) {
               <p style="font-size:0.88rem;">${e.landmark || (e.lat ? `${e.lat}, ${e.lng}` : 'Not specified')}</p>
             </div>
             <div>
+              <p style="font-size:0.72rem;color:var(--text-muted);">DEPARTMENTS</p>
+              <p style="font-size:0.88rem;">${e.recommended_departments || 'N/A'}</p>
+            </div>
+            <div>
+              <p style="font-size:0.72rem;color:var(--text-muted);">NEAREST TEAM</p>
+              <p style="font-size:0.88rem;">${e.nearest_rescue_team || 'N/A'}</p>
+            </div>
+            <div>
               <p style="font-size:0.72rem;color:var(--text-muted);">RESPONSE ETA</p>
               <p style="font-size:0.88rem;">${e.response_time_minutes} minutes</p>
             </div>
@@ -504,23 +520,51 @@ function renderEmergencies(root, data) {
 
 function buildEmergencyCard(e) {
   const sevClass = e.severity.toLowerCase();
-  const isCritical = e.severity === 'Critical';
-  const isPendingApproval = e.status === 'Pending Supervisor Approval';
 
   let actionsHTML = '';
-  if (isCritical || e.status === 'Auto Dispatched') {
-    actionsHTML = `
-      <div class="auto-dispatch-chip">
-        <div class="pulse-dot"></div>
-        Auto-Dispatched to ${e.recommended_team}
-      </div>`;
-  } else if (isPendingApproval || e.status === 'Pending Review') {
-    actionsHTML = `
-      <button class="btn-ec-approve" data-eid="${e.emergency_id}" data-action="approve">✅ Approve & Dispatch</button>
-      <button class="btn-ec-modify"  data-eid="${e.emergency_id}" data-action="modify">✏️ Modify</button>
-      <button class="btn-ec-close"   data-eid="${e.emergency_id}" data-action="close">✖ Close Case</button>`;
-  } else {
+  if (e.status === 'Case Closed') {
     actionsHTML = statusBadge(e.status);
+  } else {
+    let buttonsHTML = '';
+    if (e.status === 'Pending Supervisor Approval' || e.status === 'Pending Review') {
+      buttonsHTML = `
+        <button class="btn-ec-approve" data-eid="${e.emergency_id}" data-action="approve">✅ Approve</button>
+        <button class="btn-ec-close"   data-eid="${e.emergency_id}" data-action="close">✖ Close</button>
+      `;
+    } else {
+      buttonsHTML = statusBadge(e.status);
+    }
+
+    const statuses = [
+      'Complaint Submitted',
+      'AI Analysis Complete',
+      'Pending Supervisor Approval',
+      'Pending Review',
+      'Auto Dispatched',
+      'Team Assigned',
+      'Team Dispatched',
+      'Team Arrived',
+      'Rescue Completed',
+      'Case Closed'
+    ];
+
+    const options = statuses.map(st => 
+      `<option value="${st}" ${e.status === st ? 'selected' : ''}>${st}</option>`
+    ).join('');
+
+    actionsHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;width:100%;">
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+          ${buttonsHTML}
+        </div>
+        <div style="display:flex;align-items:center;gap:0.5rem;">
+          <span style="font-size:0.75rem;color:var(--text-muted);">Status:</span>
+          <select class="status-select" data-eid="${e.emergency_id}" style="background:rgba(255,255,255,0.05);color:var(--text-primary);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:0.25rem 0.5rem;font-size:0.8rem;outline:none;cursor:pointer;">
+            ${options}
+          </select>
+        </div>
+      </div>
+    `;
   }
 
   return `
@@ -539,7 +583,8 @@ function buildEmergencyCard(e) {
       </div>
       <div class="ec-description">${e.description}</div>
       <div class="ec-meta-row">
-        <span class="ec-meta-item">🚒 ${e.recommended_team}</span>
+        <span class="ec-meta-item">🚒 Team: ${e.nearest_rescue_team || e.recommended_team}</span>
+        <span class="ec-meta-item">🏢 Depts: ${e.recommended_departments || 'N/A'}</span>
         <span class="ec-meta-item">⏱ ${e.response_time_minutes} min ETA</span>
         <span class="ec-meta-item">🎯 ${e.confidence_score}% confidence</span>
         ${e.landmark ? `<span class="ec-meta-item">📍 ${e.landmark}</span>` : ''}
@@ -569,6 +614,35 @@ function attachCardActions() {
         const title = document.getElementById('modal-action-title');
         if (title) title.textContent = 'Modify Emergency';
         if (modal) modal.classList.add('active');
+      }
+    });
+  });
+
+  // Wire up status-select change listeners
+  document.querySelectorAll('.status-select').forEach(select => {
+    select.addEventListener('change', async (event) => {
+      const eid = select.dataset.eid;
+      const newStatus = event.target.value;
+      
+      try {
+        const res = await apiPatch(`/api/rescue/emergencies/${eid}`, {
+          status: newStatus,
+          note: `Status manually updated to ${newStatus}`,
+          actor: 'Supervisor'
+        });
+        showToast(res.message || 'Status updated.', 'success');
+        
+        // Reload data
+        const root    = document.getElementById('control-root');
+        const statsEl = document.getElementById('control-stats');
+        controlData = await apiGet('/api/rescue/emergencies');
+        renderStats(statsEl);
+        const filtered = activeFilter === 'all'
+          ? controlData
+          : controlData.filter(e => e.severity.toLowerCase() === activeFilter || e.status.toLowerCase().includes(activeFilter));
+        renderEmergencies(root, filtered);
+      } catch (err) {
+        showToast(`Failed to update status: ${err.message}`, 'error');
       }
     });
   });
@@ -604,7 +678,7 @@ export function initControlRoomModal() {
         renderStats(statsEl);
         const filtered = activeFilter === 'all'
           ? controlData
-          : controlData.filter(e => e.severity.toLowerCase() === activeFilter);
+          : controlData.filter(e => e.severity.toLowerCase() === activeFilter || e.status.toLowerCase().includes(activeFilter));
         renderEmergencies(root, filtered);
 
       } catch (err) {

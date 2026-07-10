@@ -17,7 +17,9 @@ RESCUE_RULES = [
         'severity': 'Critical',
         'team': 'Fire Response Unit',
         'eta': 8,
-        'confidence': 96
+        'confidence': 96,
+        'departments': 'Fire Services, Disaster Management, Health Dept',
+        'nearest_team': 'Ameerpet Fire Station Unit'
     },
     {
         'keywords': ['flood', 'drowning', 'swept', 'submerged', 'waterlogged', 'drowning', 'flash flood', 'washed away'],
@@ -25,7 +27,9 @@ RESCUE_RULES = [
         'severity': 'Critical',
         'team': 'Flood Rescue (NDRF)',
         'eta': 10,
-        'confidence': 94
+        'confidence': 94,
+        'departments': 'Disaster Management (NDRF), Irrigation Dept',
+        'nearest_team': 'Secunderabad NDRF Battalion'
     },
     {
         'keywords': ['collapse', 'collapsed', 'building fell', 'trapped', 'rubble', 'debris', 'structure', 'sinkhole', 'earthquake'],
@@ -33,7 +37,9 @@ RESCUE_RULES = [
         'severity': 'Critical',
         'team': 'SDRF Structural Response Team',
         'eta': 12,
-        'confidence': 95
+        'confidence': 95,
+        'departments': 'Disaster Management (SDRF), Municipal Corp (GHMC)',
+        'nearest_team': 'Jubilee Hills SDRF Team'
     },
     {
         'keywords': ['gas leak', 'gas pipe', 'chemical', 'toxic', 'hazmat', 'poison', 'fumes', 'lpg', 'cylinder blast'],
@@ -41,7 +47,9 @@ RESCUE_RULES = [
         'severity': 'High',
         'team': 'Hazmat Response Unit',
         'eta': 12,
-        'confidence': 91
+        'confidence': 91,
+        'departments': 'Fire Services, Pollution Control Board, Hazmat Response',
+        'nearest_team': 'Gachibowli Hazmat Station'
     },
     {
         'keywords': ['accident', 'crash', 'collision', 'vehicle overturned', 'truck', 'bus', 'car', 'road', 'highway', 'injured', 'injury', 'hit'],
@@ -49,7 +57,9 @@ RESCUE_RULES = [
         'severity': 'High',
         'team': 'Emergency Response Team',
         'eta': 15,
-        'confidence': 88
+        'confidence': 88,
+        'departments': 'Police Department, Health Department (108)',
+        'nearest_team': 'Madhapur Patrol Unit'
     },
     {
         'keywords': ['power line', 'electric wire', 'live wire', 'fallen wire', 'electrocution', 'transformer blast'],
@@ -57,7 +67,9 @@ RESCUE_RULES = [
         'severity': 'Medium',
         'team': 'Electrical Emergency Unit',
         'eta': 20,
-        'confidence': 85
+        'confidence': 85,
+        'departments': 'Electricity Board (TSSPDCL), Fire Services',
+        'nearest_team': 'Begumpet Power Grid Response'
     },
     {
         'keywords': ['fallen tree', 'tree fell', 'uprooted', 'tree blocking', 'storm damage', 'windstorm', 'cyclone damage'],
@@ -65,7 +77,9 @@ RESCUE_RULES = [
         'severity': 'Medium',
         'team': 'Civic Emergency Team',
         'eta': 25,
-        'confidence': 82
+        'confidence': 82,
+        'departments': 'Forest Department, Municipal Corp (GHMC)',
+        'nearest_team': 'Kondapur Municipal Crew'
     },
     {
         'keywords': ['landslide', 'mudslide', 'mud', 'hillside', 'slope'],
@@ -73,14 +87,16 @@ RESCUE_RULES = [
         'severity': 'High',
         'team': 'SDRF Structural Response Team',
         'eta': 18,
-        'confidence': 87
+        'confidence': 87,
+        'departments': 'Disaster Management (SDRF), Geological Survey',
+        'nearest_team': 'Hills SDRF Response Team'
     },
 ]
 
 def run_ai_analysis(description: str) -> dict:
     """
     Rule-based AI engine to classify rescue emergencies.
-    Returns incident_type, severity, recommended_team, response_time_minutes, confidence_score.
+    Returns incident_type, severity, recommended_team, response_time_minutes, confidence_score, recommended_departments, nearest_rescue_team.
     """
     text = description.lower()
     
@@ -92,7 +108,9 @@ def run_ai_analysis(description: str) -> dict:
                     'severity': rule['severity'],
                     'recommended_team': rule['team'],
                     'response_time_minutes': rule['eta'],
-                    'confidence_score': rule['confidence']
+                    'confidence_score': rule['confidence'],
+                    'recommended_departments': rule['departments'],
+                    'nearest_rescue_team': rule['nearest_team']
                 }
     
     # Default fallback
@@ -101,7 +119,9 @@ def run_ai_analysis(description: str) -> dict:
         'severity': 'Low',
         'recommended_team': 'General Rescue Team',
         'response_time_minutes': 45,
-        'confidence_score': 70
+        'confidence_score': 70,
+        'recommended_departments': 'Municipal Services',
+        'nearest_rescue_team': 'Local Patrol Squad'
     }
 
 
@@ -176,13 +196,15 @@ def submit_emergency():
         INSERT INTO rescue_emergencies
             (emergency_id, description, image_path, lat, lng, landmark,
              incident_type, severity, recommended_team, response_time_minutes,
-             confidence_score, status, submitted_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             confidence_score, status, submitted_at, updated_at,
+             recommended_departments, nearest_rescue_team)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             emergency_id, description, image_path, lat, lng, landmark,
             ai['incident_type'], ai['severity'], ai['recommended_team'],
             ai['response_time_minutes'], ai['confidence_score'],
-            status, now, now
+            status, now, now,
+            ai['recommended_departments'], ai['nearest_rescue_team']
         ))
 
         # Log the event
@@ -278,12 +300,13 @@ def manage_emergency(eid):
 
         # PATCH – supervisor action
         data   = request.json or {}
-        action = data.get('action')   # 'approve', 'close', 'modify'
+        action = data.get('action')   # 'approve', 'close', 'modify' (optional)
+        status_input = data.get('status') # Allow direct status update
         note   = data.get('note', '')
         actor  = data.get('actor', 'Supervisor')
 
-        if not action:
-            return jsonify({"error": "action is required (approve / close / modify)."}), 400
+        if not action and not status_input:
+            return jsonify({"error": "action or status is required."}), 400
 
         now = datetime.now().isoformat()
 
@@ -292,7 +315,7 @@ def manage_emergency(eid):
             'close':   'Case Closed',
             'modify':  'Pending Supervisor Approval',
         }
-        new_status = STATUS_MAP.get(action)
+        new_status = status_input or STATUS_MAP.get(action)
         if not new_status:
             return jsonify({"error": f"Unknown action: {action}"}), 400
 
@@ -301,16 +324,24 @@ def manage_emergency(eid):
         WHERE emergency_id = ?
         """, (new_status, note, now, eid))
 
-        event_label = {
-            'approve': 'SUPERVISOR_APPROVED',
-            'close':   'CASE_CLOSED',
-            'modify':  'SUPERVISOR_MODIFIED',
-        }[action]
+        event_label = 'SUPERVISOR_UPDATE'
+        if action in ('approve', 'close', 'modify'):
+            event_label = {
+                'approve': 'SUPERVISOR_APPROVED',
+                'close':   'CASE_CLOSED',
+                'modify':  'SUPERVISOR_MODIFIED',
+            }[action]
+
+        action_description = f"Status updated to '{new_status}'"
+        if action:
+            action_description = f"Supervisor {action}d emergency. Note: {note or 'N/A'}"
+        else:
+            action_description = f"Status updated manually to '{new_status}'. Note: {note or 'N/A'}"
 
         cursor.execute("""
         INSERT INTO rescue_audit_logs (emergency_id, event_type, action, actor, timestamp)
         VALUES (?, ?, ?, ?, ?)
-        """, (eid, event_label, f"Supervisor {action}d emergency. Note: {note or 'N/A'}", actor, now))
+        """, (eid, event_label, action_description, actor, now))
 
         conn.commit()
         return jsonify({"message": f"Emergency {eid} updated to '{new_status}'.", "new_status": new_status})
