@@ -4,16 +4,175 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rescue Team Dashboard | GovConnect</title>
-  <meta name="description" content="Field Rescue Team Dashboard. Accept assigned missions, track journey progress, update operations milestones, and request backup.">
+  <meta name="description" content="Field Rescue Team Dashboard — Login, view AI-assigned missions and update live operation status.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../../css/style.css">
   <link rel="stylesheet" href="../../css/rescue.css">
+  <style>
+    /* ─── Login Screen ─── */
+    .team-login-screen {
+      min-height: 80vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+    .login-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 20px;
+      padding: 2.5rem 2rem;
+      width: 100%;
+      max-width: 420px;
+      backdrop-filter: blur(16px);
+      text-align: center;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.4);
+    }
+    .login-logo {
+      font-size: 3.2rem;
+      margin-bottom: 0.5rem;
+      filter: drop-shadow(0 0 16px rgba(245,158,11,0.4));
+    }
+    .login-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.6rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #f59e0b, #ef4444);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.25rem;
+    }
+    .login-sub {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-bottom: 2rem;
+    }
+    .login-field {
+      margin-bottom: 1.1rem;
+      text-align: left;
+    }
+    .login-field label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.4rem;
+    }
+    .login-field input {
+      width: 100%;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      color: var(--text-primary);
+      font-size: 0.95rem;
+      font-family: 'Inter', sans-serif;
+      transition: border-color 0.2s;
+      box-sizing: border-box;
+    }
+    .login-field input:focus {
+      outline: none;
+      border-color: rgba(245,158,11,0.5);
+      background: rgba(245,158,11,0.04);
+    }
+    .login-field input.pin-field {
+      letter-spacing: 0.35em;
+      font-size: 1.2rem;
+      text-align: center;
+    }
+    .btn-login {
+      width: 100%;
+      background: linear-gradient(135deg, #f59e0b, #ef4444);
+      border: none;
+      border-radius: 10px;
+      padding: 0.85rem 1.5rem;
+      color: #fff;
+      font-family: 'Outfit', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      margin-top: 0.5rem;
+    }
+    .btn-login:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-login:active { transform: translateY(0); }
+    .btn-login:disabled { opacity: 0.5; cursor: not-allowed; }
+    .login-error {
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 8px;
+      padding: 0.65rem 1rem;
+      color: #fca5a5;
+      font-size: 0.83rem;
+      margin-top: 1rem;
+      display: none;
+    }
+    .credential-hint {
+      margin-top: 1.5rem;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 10px;
+      padding: 0.8rem 1rem;
+      text-align: left;
+    }
+    .credential-hint summary {
+      cursor: pointer;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      user-select: none;
+    }
+    .credential-hint table {
+      margin-top: 0.75rem;
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+    .credential-hint td {
+      padding: 0.25rem 0.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .credential-hint td:first-child { font-weight: 700; color: var(--rescue-primary); }
+
+    /* ─── Dashboard Banner ─── */
+    .unit-banner {
+      background: rgba(245,158,11,0.07);
+      border: 1px solid rgba(245,158,11,0.18);
+      border-radius: 12px;
+      padding: 0.7rem 1.2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+    .unit-banner-left { display: flex; align-items: center; gap: 0.75rem; }
+    .unit-badge-icon { font-size: 1.6rem; }
+    .unit-banner-label { font-size: 0.9rem; font-weight: 700; color: var(--rescue-primary); }
+    .unit-banner-sub { font-size: 0.75rem; color: var(--text-muted); }
+    .workload-chip {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px;
+      padding: 0.2rem 0.7rem;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+    .workload-chip.busy {
+      background: rgba(239,68,68,0.08);
+      border-color: rgba(239,68,68,0.2);
+      color: #fca5a5;
+    }
+  </style>
 </head>
 <body>
 
-  <!-- Shared Navbar -->
   <div id="navbar-placeholder"></div>
-
-  <!-- Toast Notifications -->
   <div class="toast-container" id="toast-container"></div>
 
   <main class="container rescue-page">
@@ -25,44 +184,93 @@
         <h1>🚒 Rescue Team Dashboard</h1>
         <span class="module-badge rescue">Field Operations</span>
       </div>
-      <p style="color:var(--text-secondary);font-size:0.95rem;margin-top:0.5rem;">
-        Active Field Crew Dashboard. View your assigned rescue missions, accept dispatches, update live progress, and request backup from control.
-      </p>
     </section>
 
-    <!-- split layout -->
-    <div class="result-layout" style="margin-top: 1.5rem;">
-      
-      <!-- LEFT: Missions List -->
-      <div class="glass-card" style="padding: 1.5rem; display:flex; flex-direction:column; gap: 1rem; min-height: 450px;">
-        <h3 style="font-family:var(--font-display); font-size: 1.1rem; color:var(--rescue-primary); margin-bottom: 0.5rem; display:flex; justify-content:space-between; align-items:center;">
-          <span>📋 Assigned Missions</span>
-          <span id="mission-count" style="font-size: 0.8rem; background:rgba(255,255,255,0.05); padding: 0.2rem 0.5rem; border-radius: 20px; color:var(--text-muted);">0 active</span>
-        </h3>
-        
-        <div id="missions-list" style="display:flex; flex-direction:column; gap:0.75rem; overflow-y:auto; max-height:550px; padding-right:0.25rem;">
-          <!-- Loaded dynamically -->
-          <div class="empty-state" style="padding: 2rem 1rem;">
-            <div class="empty-icon">⏳</div>
-            <p>Loading assigned missions...</p>
+    <!-- ══════════ LOGIN SCREEN ══════════ -->
+    <div id="login-screen" class="team-login-screen">
+      <div class="login-card">
+        <div class="login-logo">🪪</div>
+        <h2 class="login-title">Unit Login</h2>
+        <p class="login-sub">Enter your unit credentials to access your assigned mission queue.</p>
+
+        <form id="login-form" autocomplete="off">
+          <div class="login-field">
+            <label for="unit-id-input">Unit ID</label>
+            <input type="text" id="unit-id-input" placeholder="e.g. FIRE1, ERT2, NDRF_A" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="login-field">
+            <label for="unit-pin-input">PIN</label>
+            <input type="password" id="unit-pin-input" class="pin-field" placeholder="• • • •" maxlength="4">
+          </div>
+          <div class="login-error" id="login-error"></div>
+          <button type="submit" class="btn-login" id="btn-login">🔓 Access Dashboard</button>
+        </form>
+
+        <details class="credential-hint">
+          <summary>🔑 Demo Credentials</summary>
+          <table>
+            <tr><td>FIRE1</td><td>PIN: 1111</td><td>Fire Unit 1</td></tr>
+            <tr><td>FIRE2</td><td>PIN: 2222</td><td>Fire Unit 2</td></tr>
+            <tr><td>NDRF_A</td><td>PIN: 4444</td><td>NDRF Unit A</td></tr>
+            <tr><td>ERT1</td><td>PIN: 1212</td><td>ERT Unit 1</td></tr>
+            <tr><td>HM_A</td><td>PIN: 8888</td><td>Hazmat Unit Alpha</td></tr>
+            <tr><td>SDRF1</td><td>PIN: 6666</td><td>SDRF Unit 1</td></tr>
+          </table>
+        </details>
+      </div>
+    </div>
+
+    <!-- ══════════ MAIN DASHBOARD (post-login) ══════════ -->
+    <div id="dashboard-main" style="display:none; margin-top:0.5rem;">
+
+      <!-- Unit Banner -->
+      <div class="unit-banner">
+        <div class="unit-banner-left">
+          <span class="unit-badge-icon" id="banner-icon">🚒</span>
+          <div>
+            <div class="unit-banner-label" id="banner-unit-label">—</div>
+            <div class="unit-banner-sub" id="banner-primary-team">—</div>
           </div>
         </div>
-      </div>
-
-      <!-- RIGHT: Selected Mission Details & Actions -->
-      <div id="details-panel" class="glass-card" style="padding: 1.5rem; min-height: 450px;">
-        <div class="empty-state" style="padding: 5rem 1rem;">
-          <div class="empty-icon">🚒</div>
-          <h3>No Mission Selected</h3>
-          <p style="color:var(--text-muted); font-size:0.85rem; margin-top:0.5rem;">Select an active mission from the left panel to begin field operations.</p>
+        <div style="display:flex; align-items:center; gap:0.6rem;">
+          <span class="workload-chip" id="workload-chip">0 active · 0 min</span>
+          <button id="btn-logout" class="team-btn btn-secondary" style="font-size:0.75rem; padding:0.25rem 0.7rem;">⎋ Logout</button>
         </div>
       </div>
 
+      <!-- Split Layout -->
+      <div class="result-layout">
+
+        <!-- LEFT: AI-Assigned Mission Queue -->
+        <div class="glass-card" style="padding:1.5rem; display:flex; flex-direction:column; gap:1rem; min-height:450px;">
+          <h3 style="font-family:var(--font-display); font-size:1.1rem; color:var(--rescue-primary); margin-bottom:0.25rem; display:flex; justify-content:space-between; align-items:center;">
+            <span>🤖 AI-Assigned Queue</span>
+            <span id="mission-count" style="font-size:0.78rem; background:rgba(255,255,255,0.05); padding:0.2rem 0.5rem; border-radius:20px; color:var(--text-muted);">0 missions</span>
+          </h3>
+          <p style="font-size:0.75rem; color:var(--text-muted); margin-top:-0.5rem;">Cases are auto-assigned by the AI. Critical cases are always shown first.</p>
+
+          <div id="missions-list" style="display:flex; flex-direction:column; gap:0.75rem; overflow-y:auto; max-height:550px; padding-right:0.25rem;">
+            <div class="empty-state" style="padding:2rem 1rem;">
+              <div class="empty-icon">⏳</div>
+              <p>Loading your queue...</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: Active Mission Detail Panel -->
+        <div id="details-panel" class="glass-card" style="padding:1.5rem; min-height:450px;">
+          <div class="empty-state" style="padding:5rem 1rem;">
+            <div class="empty-icon">🚒</div>
+            <h3>No Active Mission</h3>
+            <p style="color:var(--text-muted); font-size:0.85rem; margin-top:0.5rem;">The AI will auto-display your highest-priority active mission here.</p>
+          </div>
+        </div>
+
+      </div>
     </div>
 
   </main>
 
-  <!-- Shared Footer -->
   <div id="footer-placeholder"></div>
 
   <script src="../../components/navbar.js"></script>

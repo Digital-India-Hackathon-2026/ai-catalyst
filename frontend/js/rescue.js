@@ -65,6 +65,299 @@ function severityBadge(severity) {
   return `<span class="badge-severity ${s}">${icons[s] || ''} ${severity}</span>`;
 }
 
+let googleMapsLoadedPromise = null;
+
+export function ensureGoogleMapsLoaded() {
+  if (window.google && window.google.maps) {
+    return Promise.resolve();
+  }
+  if (googleMapsLoadedPromise) {
+    return googleMapsLoadedPromise;
+  }
+
+  googleMapsLoadedPromise = new Promise(async (resolve, reject) => {
+    try {
+      const config = await apiGet('/api/rescue/config/maps-key');
+      const key = config.key || '';
+      if (!key) {
+        reject(new Error("Maps API Key missing"));
+        return;
+      }
+      
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&callback=initGoogleMap`;
+      script.async = true;
+      script.defer = true;
+      
+      window.initGoogleMap = () => {
+        resolve();
+      };
+      
+      script.onerror = (err) => {
+        reject(err);
+      };
+      
+      document.head.appendChild(script);
+    } catch (err) {
+      reject(err);
+    }
+  });
+  
+  return googleMapsLoadedPromise;
+}
+
+let leafletLoadedPromise = null;
+
+export function ensureLeafletLoaded() {
+  if (window.L) {
+    return Promise.resolve();
+  }
+  if (leafletLoadedPromise) {
+    return leafletLoadedPromise;
+  }
+  leafletLoadedPromise = new Promise((resolve) => {
+    // Load Leaflet CSS
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(link);
+    
+    // Load Leaflet JS
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => {
+      resolve();
+    };
+    document.head.appendChild(script);
+  });
+  return leafletLoadedPromise;
+}
+
+export async function renderUnifiedMap(containerId, center, zoom, markers = []) {
+  const container = document.getElementById(containerId);
+  if (!container) return null;
+  container.innerHTML = ''; // Clear loading/offline text
+  
+  // 1. Fetch maps key config
+  let key = '';
+  try {
+    const config = await apiGet('/api/rescue/config/maps-key');
+    key = config.key || '';
+  } catch (err) {
+    console.warn("Could not fetch maps API key from backend:", err);
+  }
+  
+  const isDummy = !key || key.toLowerCase().includes('dummy') || key === 'undefined';
+  
+  if (!isDummy) {
+    // Attempt Google Maps
+    try {
+      await ensureGoogleMapsLoaded();
+      const map = new google.maps.Map(container, {
+        center: center,
+        zoom: zoom,
+        styles: MAP_DARK_STYLES,
+        disableDefaultUI: true,
+        zoomControl: true
+      });
+      
+      const bounds = new google.maps.LatLngBounds();
+      let hasMarkers = false;
+      
+      markers.forEach(m => {
+        const markerColor = m.color || '#3b82f6';
+        let markerOptions = {
+          position: m.pos,
+          map: map,
+          title: m.title
+        };
+        
+        if (m.icon) {
+          if (m.icon.url) {
+            markerOptions.icon = m.icon;
+          } else if (typeof m.icon === 'string') {
+            // Text/Emoji Marker representation in Google Maps
+            // Using small circle with label
+            markerOptions.label = {
+              text: m.icon,
+              fontSize: '20px'
+            };
+            markerOptions.icon = {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 0
+            };
+          }
+        } else {
+          markerOptions.icon = {
+            path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+            fillColor: markerColor,
+            fillOpacity: 0.9,
+            strokeWeight: 2,
+            strokeColor: "#ffffff",
+            scale: 6
+          };
+        }
+        
+        const gMarker = new google.maps.Marker(markerOptions);
+        
+        if (m.info) {
+          const infoWindow = new google.maps.InfoWindow({
+            content: m.info
+          });
+          gMarker.addListener('click', () => {
+            infoWindow.open(map, gMarker);
+          });
+        }
+        
+        bounds.extend(m.pos);
+        hasMarkers = true;
+      });
+      
+      if (hasMarkers && markers.length > 1) {
+        map.fitBounds(bounds);
+        const listener = google.maps.event.addListener(map, "idle", () => {
+          if (map.getZoom() > 15) map.setZoom(15);
+          google.maps.event.removeListener(listener);
+        });
+      }
+      
+      return { type: 'google', map, rawMap: map };
+    } catch (gErr) {
+      console.warn("Google Maps failed to load, falling back to Leaflet:", gErr);
+    }
+  }
+  
+  // 2. Leaflet Fallback
+  await ensureLeafletLoaded();
+  const map = L.map(container, {
+    zoomControl: true,
+    attributionControl: false
+  }).setView([center.lat, center.lng], zoom);
+  
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 20
+  }).addTo(map);
+  
+  const group = [];
+  
+  markers.forEach(m => {
+    let leafletMarker;
+    if (m.icon && typeof m.icon === 'string') {
+      // Use Leaflet DivIcon for emoji icon symbols (vehicle tracking)
+      const icon = L.divIcon({
+        html: `<div style="font-size: 24px; text-shadow: 0 0 4px rgba(0,0,0,0.5);">${m.icon}</div>`,
+        className: 'custom-div-icon',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      });
+      leafletMarker = L.marker([m.pos.lat, m.pos.lng], { icon }).addTo(map);
+    } else {
+      const markerColor = m.color || '#3b82f6';
+      leafletMarker = L.circleMarker([m.pos.lat, m.pos.lng], {
+        radius: 8,
+        fillColor: markerColor,
+        fillOpacity: 0.9,
+        color: '#ffffff',
+        weight: 2
+      }).addTo(map);
+    }
+    
+    if (m.info) {
+      leafletMarker.bindPopup(m.info);
+    }
+    group.push([m.pos.lat, m.pos.lng]);
+  });
+  
+  if (group.length > 1) {
+    map.fitBounds(group, { padding: [40, 40] });
+  }
+  
+  return { type: 'leaflet', map, rawMap: map };
+}
+
+
+export const MAP_DARK_STYLES = [
+  { elementType: "geometry", stylers: [{ color: "#1a1a24" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#1a1a24" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#7b7c85" }] },
+  {
+    featureType: "administrative.locality",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#fb923c" }],
+  },
+  {
+    featureType: "poi",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#f59e0b" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "geometry",
+    stylers: [{ color: "#12261e" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#6b7280" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry",
+    stylers: [{ color: "#2d2d3a" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#21212c" }],
+  },
+  {
+    featureType: "road",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#9ca3af" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry",
+    stylers: [{ color: "#3e3e4f" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#2d2d3a" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#fb923c" }],
+  },
+  {
+    featureType: "transit",
+    elementType: "geometry",
+    stylers: [{ color: "#272733" }],
+  },
+  {
+    featureType: "transit.station",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#fb923c" }],
+  },
+  {
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#0f172a" }],
+  },
+  {
+    featureType: "water",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#475569" }],
+  },
+  {
+    featureType: "water",
+    elementType: "labels.text.stroke",
+    stylers: [{ color: "#0f172a" }],
+  },
+];
+
+
 function statusBadge(status) {
   const map = {
     'Auto Dispatched':            'auto-dispatch',
@@ -243,6 +536,23 @@ function renderResultPage(e, root) {
     'Pending Review':              '📋',
   }[e.status] || '📋';
 
+  // Parse complete Gemini JSON response
+  let gemini = {};
+  try {
+    if (e.ai_analysis_json) {
+      gemini = JSON.parse(e.ai_analysis_json);
+    }
+  } catch (err) {
+    console.error("Error parsing ai_analysis_json:", err);
+  }
+
+  const aiSummary = gemini.ai_summary || e.ai_decision_summary || 'No summary available.';
+  const requiredDepts = Array.isArray(gemini.required_departments) ? gemini.required_departments : (e.recommended_departments ? e.recommended_departments.split(', ') : []);
+  const risks = Array.isArray(gemini.possible_risks) ? gemini.possible_risks : (e.possible_risks ? e.possible_risks.split(', ') : []);
+  const actions = Array.isArray(gemini.suggested_rescue_actions) ? gemini.suggested_rescue_actions : (e.suggested_actions ? e.suggested_actions.split(', ') : []);
+  const address = gemini.address || 'N/A';
+  const landmark = gemini.landmark || e.landmark || 'N/A';
+
   const confidenceCircumference = 2 * Math.PI * 42; // r=42
   const dashOffset = confidenceCircumference * (1 - e.confidence_score / 100);
 
@@ -252,6 +562,11 @@ function renderResultPage(e, root) {
     medium:   '#f59e0b',
     low:      '#10b981'
   }[sevClass] || '#f59e0b';
+
+  // Format list items into clean lists
+  const deptsHTML = requiredDepts.map(d => `<span style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); color:var(--rescue-primary); padding:0.15rem 0.5rem; border-radius:20px; font-size:0.75rem; white-space:nowrap;">${d}</span>`).join(' ') || 'N/A';
+  const risksHTML = risks.map(r => `<li style="margin-bottom:0.35rem; color:#fca5a5;">⚠️ ${r}</li>`).join('') || '<li style="color:var(--text-muted);">No immediate risks listed</li>';
+  const actionsHTML_list = actions.map(a => `<li style="margin-bottom:0.35rem; color:#6ee7b7;">✔️ ${a}</li>`).join('') || '<li style="color:var(--text-muted);">No suggested actions listed</li>';
 
   root.innerHTML = `
     <div class="result-layout">
@@ -266,34 +581,71 @@ function renderResultPage(e, root) {
 
         <div class="result-meta-grid">
           <div class="result-meta-item">
-            <div class="label">🚒 Rescue Team</div>
+            <div class="label">🚒 Recommended Team</div>
             <div class="value" style="font-size:0.9rem;">${e.recommended_team}</div>
           </div>
           <div class="result-meta-item">
-            <div class="label">⏱ Est. Response</div>
+            <div class="label">⏱ Est. Response Time</div>
             <div class="value">${e.response_time_minutes} min</div>
           </div>
           <div class="result-meta-item">
             <div class="label">🏢 Depts Involved</div>
-            <div class="value" style="font-size:0.82rem;">${e.recommended_departments || 'N/A'}</div>
+            <div class="value" style="display:flex; flex-wrap:wrap; gap:0.25rem; margin-top:0.25rem;">${deptsHTML}</div>
           </div>
           <div class="result-meta-item">
-            <div class="label">📍 Nearest Team</div>
+            <div class="label">📍 Assigned Patrol Unit</div>
             <div class="value" style="font-size:0.82rem;">${e.nearest_rescue_team || 'N/A'}</div>
           </div>
           <div class="result-meta-item">
-            <div class="label">📍 Location</div>
-            <div class="value" style="font-size:0.82rem;">${e.landmark || (e.lat ? `${e.lat}, ${e.lng}` : 'Not specified')}</div>
+            <div class="label">📍 Context Landmark</div>
+            <div class="value" style="font-size:0.82rem;">${landmark}</div>
           </div>
           <div class="result-meta-item">
-            <div class="label">🕐 Submitted</div>
-            <div class="value" style="font-size:0.82rem;">${formatTime(e.submitted_at)}</div>
+            <div class="label">🏠 Context Address</div>
+            <div class="value" style="font-size:0.82rem;">${address}</div>
           </div>
         </div>
 
-        <div class="result-status-banner ${statusBannerClass}">
+        <!-- Gemini AI Detailed Diagnosis -->
+        <div style="margin-top:1.5rem; border-top:1px solid rgba(255,255,255,0.08); padding-top:1rem;">
+          <h4 style="font-size:0.9rem; font-weight:700; color:var(--rescue-primary); margin-bottom:0.75rem; display:flex; align-items:center; gap:0.5rem;">
+            🧠 Gemini AI Analysis & Diagnostic Insights
+          </h4>
+          <div style="display:flex; flex-direction:column; gap:1rem; font-size:0.85rem; line-height:1.5; color:var(--text-secondary);">
+            <div>
+              <strong style="color:var(--text-primary); display:block; margin-bottom:0.25rem;">📝 AI Summary:</strong>
+              <span style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:0.6rem 0.8rem; border-radius:6px; display:block;">
+                ${aiSummary}
+              </span>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:0.25rem;">
+              <div>
+                <strong style="color:var(--text-primary); display:block; margin-bottom:0.25rem;">⚠️ Possible Risks:</strong>
+                <ul style="background:rgba(239,68,68,0.05); border:1px solid rgba(239,68,68,0.12); padding:0.75rem 1rem; border-radius:6px; min-height:80px; margin:0; list-style:none;">
+                  ${risksHTML}
+                </ul>
+              </div>
+              <div>
+                <strong style="color:var(--text-primary); display:block; margin-bottom:0.25rem;">🚒 Suggested Rescue Actions:</strong>
+                <ul style="background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.12); padding:0.75rem 1rem; border-radius:6px; min-height:80px; margin:0; list-style:none;">
+                  ${actionsHTML_list}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="result-status-banner ${statusBannerClass}" style="margin-top:1.5rem;">
           <span>${statusIcon}</span>
           <span>${e.status}</span>
+        </div>
+
+        <!-- Embedded Google Map -->
+        <div style="margin-top:1.5rem; border-top:1px solid rgba(255,255,255,0.08); padding-top:1rem;">
+          <h4 style="font-size:0.9rem; font-weight:700; color:var(--rescue-primary); margin-bottom:0.75rem;">
+            🗺️ Incident Location Map
+          </h4>
+          <div id="result-map" style="width:100%; height:250px; border-radius:8px; background:rgba(0,0,0,0.1); border:1px solid rgba(255,255,255,0.05);"></div>
         </div>
       </div>
 
@@ -314,7 +666,7 @@ function renderResultPage(e, root) {
             </svg>
             <div class="confidence-ring-label" style="color:${strokeColor};">${e.confidence_score}%</div>
           </div>
-          <p style="font-size:0.78rem;color:var(--text-secondary);">Rule-based AI classification confidence</p>
+          <p style="font-size:0.78rem;color:var(--text-secondary);">Gemini AI classification confidence</p>
         </div>
 
         <!-- Decision summary -->
@@ -334,7 +686,31 @@ function renderResultPage(e, root) {
       </div>
     </div>
   `;
+
+  // Render Map at the coordinate
+  if (e.lat && e.lng) {
+    const pos = { lat: parseFloat(e.lat), lng: parseFloat(e.lng) };
+    const markerColor = {
+      'Critical': '#ef4444',
+      'High':     '#f97316',
+      'Medium':   '#eab308',
+      'Low':      '#22c55e'
+    }[e.severity] || '#3b82f6';
+    
+    setTimeout(() => {
+      renderUnifiedMap('result-map', pos, 15, [
+        {
+          pos: pos,
+          title: e.incident_type,
+          color: markerColor,
+          info: `<div style="color:#000; font-size:0.82rem; line-height:1.4;"><strong>${e.incident_type}</strong><br>Severity: ${e.severity}</div>`
+        }
+      ]);
+    }, 100);
+  }
 }
+
+
 
 function getPolicyExplanation(severity, status) {
   if (severity === 'Critical')
@@ -412,6 +788,15 @@ function renderTrackingPage(data, root) {
         <div class="tracking-stepper">${stepsHTML}</div>
       </div>
 
+      <!-- Live Team Tracking Map -->
+      <div class="glass-card" style="margin-bottom:1.5rem; padding:0; overflow:hidden;">
+        <div style="padding:1rem; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="margin:0; font-size:0.95rem; font-family:var(--font-display); color:var(--rescue-primary);">🗺️ Live Team Tracker Map</h3>
+          <span style="font-size:0.75rem; color:var(--text-muted);" id="tracker-status-text">Locating rescue unit...</span>
+        </div>
+        <div id="tracker-map" style="width:100%; height:320px; background:rgba(0,0,0,0.1);"></div>
+      </div>
+
       <!-- Emergency details -->
       <div class="glass-card" style="margin-bottom:1.5rem;">
         <div class="rescue-section-title">🔍 Emergency Details</div>
@@ -456,7 +841,113 @@ function renderTrackingPage(data, root) {
       </div>
     </div>
   `;
+
+  // Team Tracking Simulation on Map — always show map, use team base as fallback if GPS missing
+  {
+    const TEAM_BASES = {
+      'Fire Response Unit':             { lat: 17.4374, lng: 78.4482, name: 'Ameerpet Fire Station Unit', icon: '🚒' },
+      'Flood Rescue (NDRF)':            { lat: 17.4399, lng: 78.5020, name: 'Secunderabad NDRF Battalion', icon: '🚤' },
+      'SDRF Structural Response Team':  { lat: 17.4265, lng: 78.4124, name: 'Jubilee Hills SDRF Team', icon: '🚜' },
+      'Hazmat Response Unit':           { lat: 17.4483, lng: 78.3741, name: 'Gachibowli Hazmat Station', icon: '🚐' },
+      'Emergency Response Team':        { lat: 17.4486, lng: 78.3908, name: 'Madhapur Patrol Unit', icon: '🚑' },
+      'Electrical Emergency Unit':      { lat: 17.4447, lng: 78.4664, name: 'Begumpet Power Grid Response', icon: '🚐' },
+      'Civic Emergency Team':           { lat: 17.4699, lng: 78.3678, name: 'Kondapur Municipal Crew', icon: '🚛' }
+    };
+
+    const teamBase = TEAM_BASES[e.recommended_team] || { lat: 17.3850, lng: 78.4867, name: 'Central Command Base', icon: '🚒' };
+    // Use GPS if available, otherwise use team base as approximate location
+    const incidentPos = (e.lat && e.lng)
+      ? { lat: parseFloat(e.lat), lng: parseFloat(e.lng) }
+      : { lat: teamBase.lat + 0.005, lng: teamBase.lng + 0.005 }; // ~500m offset from base
+
+
+    let teamPos = { ...teamBase };
+    let trackerStatus = 'Preparing dispatch...';
+
+    const statusIndex = current_step_index;
+    
+    if (statusIndex <= 3) {
+      teamPos = { ...teamBase };
+      trackerStatus = `Unit status: ${e.status}. Stationary at ${teamBase.name}.`;
+    } else if (statusIndex === 4) {
+      teamPos = {
+        lat: teamBase.lat + (incidentPos.lat - teamBase.lat) * 0.5,
+        lng: teamBase.lng + (incidentPos.lng - teamBase.lng) * 0.5
+      };
+      trackerStatus = `Unit status: ${e.status}. En route to incident scene.`;
+    } else {
+      teamPos = { ...incidentPos };
+      trackerStatus = `Unit status: ${e.status}. Arrived at incident scene.`;
+    }
+
+    setTimeout(async () => {
+      const markers = [
+        {
+          pos: incidentPos,
+          title: `Emergency Location`,
+          color: '#ef4444',
+          info: `<div style="color:#000; font-size:0.82rem;">📍 <strong>Incident Location</strong><br>${e.incident_type}</div>`
+        }
+      ];
+
+      if (statusIndex >= 2) {
+        markers.push({
+          pos: teamBase,
+          title: `${e.recommended_team} Base`,
+          color: '#3b82f6',
+          info: `<div style="color:#000; font-size:0.82rem;">🏢 <strong>${e.recommended_team} Base</strong><br>${teamBase.name}</div>`
+        });
+
+        markers.push({
+          pos: teamPos,
+          title: `${e.nearest_rescue_team || e.recommended_team} Vehicle`,
+          icon: teamBase.icon,
+          info: `<div style="color:#000; font-size:0.82rem;">${teamBase.icon} <strong>${e.nearest_rescue_team || e.recommended_team}</strong><br>Status: ${e.status}</div>`
+        });
+      }
+
+      const mapResult = await renderUnifiedMap('tracker-map', incidentPos, 13, markers);
+      
+      const statusTextEl = document.getElementById('tracker-status-text');
+      if (statusTextEl) {
+        statusTextEl.textContent = trackerStatus;
+      }
+
+      if (mapResult && statusIndex >= 2) {
+        const rawMap = mapResult.map;
+        if (mapResult.type === 'leaflet') {
+          L.polyline([
+            [teamBase.lat, teamBase.lng],
+            [incidentPos.lat, incidentPos.lng]
+          ], {
+            color: '#fb923c',
+            weight: 3,
+            dashArray: '5, 8'
+          }).addTo(rawMap);
+        } else if (mapResult.type === 'google') {
+          new google.maps.Polyline({
+            path: [teamBase, incidentPos],
+            geodesic: true,
+            strokeColor: '#fb923c',
+            strokeOpacity: 0.8,
+            strokeWeight: 3,
+            icons: [{
+              icon: {
+                path: 'M 0,-1 0,1',
+                strokeOpacity: 1,
+                scale: 2
+              },
+              offset: '0',
+              repeat: '10px'
+            }],
+            map: rawMap
+          });
+        }
+      }
+    }, 100);
+  }
 }
+
 
 // ─── CONTROL ROOM ──────────────────────────────────────────
 
@@ -465,6 +956,44 @@ let activeFilter = 'all';
 let pendingActionEid = null;
 let pendingAction    = null;
 
+let controlRoomMap = null;
+let controlRoomMarkers = [];
+
+function updateControlRoomMap() {
+  const closedStatuses = ['Case Closed', 'Mission Completed', 'Rescue Completed'];
+  const activeEmergencies = controlData.filter(e => e.lat && e.lng && !closedStatuses.includes(e.status));
+  
+  const center = { lat: 17.385044, lng: 78.486671 }; // Hyderabad Center
+  const markers = activeEmergencies.map(e => {
+    const markerColor = {
+      'Critical': '#ef4444',
+      'High':     '#f97316',
+      'Medium':   '#eab308',
+      'Low':      '#22c55e'
+    }[e.severity] || '#3b82f6';
+    
+    const infoContent = `
+      <div style="color:#000000; font-family:sans-serif; padding:0.5rem; max-width:250px; line-height:1.4;">
+        <h4 style="margin:0 0 0.25rem 0; font-size:0.95rem; font-weight:700;">${e.emergency_id}</h4>
+        <div style="font-size:0.85rem; font-weight:700; color:${markerColor}; margin-bottom:0.4rem;">${e.incident_type} (${e.severity})</div>
+        <div style="font-size:0.8rem; margin-bottom:0.4rem;"><strong>Status:</strong> ${e.status}</div>
+        <div style="font-size:0.8rem; margin-bottom:0.4rem;"><strong>Assigned Team:</strong> ${e.nearest_rescue_team || e.recommended_team || 'Unassigned'}</div>
+        <div style="font-size:0.78rem; background:#f4f4f5; padding:0.35rem; border-radius:4px; color:#4b5563;"><strong>AI Summary:</strong> ${e.ai_decision_summary || 'No summary available.'}</div>
+      </div>
+    `;
+    
+    return {
+      pos: { lat: parseFloat(e.lat), lng: parseFloat(e.lng) },
+      title: `${e.emergency_id} - ${e.incident_type}`,
+      color: markerColor,
+      info: infoContent
+    };
+  });
+  
+  renderUnifiedMap('map', center, 12, markers);
+}
+
+
 export async function initControlRoom() {
   const root    = document.getElementById('control-root');
   const statsEl = document.getElementById('control-stats');
@@ -472,42 +1001,111 @@ export async function initControlRoom() {
 
   root.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div><p>Loading emergencies…</p></div>`;
 
-  try {
-    controlData = await apiGet('/api/rescue/emergencies');
-    renderStats(statsEl);
-    renderEmergencies(root, controlData);
-    initFilters(root, statsEl);
-  } catch (err) {
-    root.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><p>Failed to load: ${err.message}. Is the Flask backend running?</p></div>`;
+  async function refresh() {
+    try {
+      controlData = await apiGet('/api/rescue/emergencies');
+      renderStats(statsEl);
+      const filtered = activeFilter === 'all'
+        ? controlData
+        : controlData.filter(e =>
+            e.severity.toLowerCase() === activeFilter ||
+            e.status.toLowerCase().includes(activeFilter)
+          );
+      renderEmergencies(root, filtered);
+      updateControlRoomMap();
+    } catch (err) {
+      root.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><p>Failed to load: ${err.message}. Is the Flask backend running?</p></div>`;
+    }
   }
+
+  await refresh();
+  initFilters(root, statsEl);
+
+  // Auto-refresh every 30 seconds so completed missions appear immediately
+  setInterval(refresh, 30000);
 }
+
 
 function renderStats(el) {
   if (!el) return;
-  const critical = controlData.filter(e => e.severity === 'Critical').length;
-  const high     = controlData.filter(e => e.severity === 'High').length;
-  const medium   = controlData.filter(e => e.severity === 'Medium').length;
-  const total    = controlData.length;
+
+  const closedStatuses = ['Case Closed', 'Mission Completed', 'Rescue Completed'];
+
+  // Active cases (not closed)
+  const activeCases = controlData.filter(e => !closedStatuses.includes(e.status));
+  const activeCount = activeCases.length;
+
+  const criticalCount = activeCases.filter(e => e.severity === 'Critical').length;
+  const highCount     = activeCases.filter(e => e.severity === 'High').length;
+  const mediumCount   = activeCases.filter(e => e.severity === 'Medium').length;
+  const lowCount      = activeCases.filter(e => e.severity === 'Low').length;
+
+  // Active teams busy (unique teams assigned to active emergencies)
+  const allTeamUnits = [
+    'Fire Unit 1', 'Fire Unit 2', 'Fire Unit 3',
+    'NDRF Unit A', 'NDRF Unit B',
+    'SDRF Unit 1', 'SDRF Unit 2',
+    'Hazmat Unit Alpha', 'Hazmat Unit Beta',
+    'ERT Unit 1', 'ERT Unit 2',
+    'EE Unit A', 'EE Unit B',
+    'Civic Crew 1', 'Civic Crew 2'
+  ];
+  
+  const busyTeamsSet = new Set();
+  activeCases.forEach(e => {
+    const assigned = e.nearest_rescue_team || e.recommended_team;
+    if (assigned && allTeamUnits.includes(assigned)) {
+      busyTeamsSet.add(assigned);
+    }
+  });
+
+  const busyTeamsCount = busyTeamsSet.size;
+  const availableTeamsCount = Math.max(0, 15 - busyTeamsCount);
+
+  // Completed missions today (any closed status updated/submitted today)
+  const todayStr = new Date().toISOString().split('T')[0];
+  const completedTodayCount = controlData.filter(e => {
+    const isClosed = closedStatuses.includes(e.status);
+    const wasUpdatedToday = (e.updated_at && e.updated_at.startsWith(todayStr)) || (e.submitted_at && e.submitted_at.startsWith(todayStr));
+    return isClosed && wasUpdatedToday;
+  }).length;
 
   el.innerHTML = `
     <div class="control-stat-card total-stat">
-      <div class="stat-label">Total Emergencies</div>
-      <div class="stat-num">${total}</div>
+      <div class="stat-label">Total Active Cases</div>
+      <div class="stat-num" style="color:var(--rescue-primary);">${activeCount}</div>
     </div>
     <div class="control-stat-card critical-stat">
-      <div class="stat-label">🔴 Critical</div>
-      <div class="stat-num">${critical}</div>
+      <div class="stat-label">🔴 Critical Priority</div>
+      <div class="stat-num">${criticalCount}</div>
     </div>
     <div class="control-stat-card high-stat">
-      <div class="stat-label">🟠 High</div>
-      <div class="stat-num">${high}</div>
+      <div class="stat-label">🟠 High Priority</div>
+      <div class="stat-num">${highCount}</div>
     </div>
     <div class="control-stat-card medium-stat">
-      <div class="stat-label">🟡 Medium</div>
-      <div class="stat-num">${medium}</div>
+      <div class="stat-label">🟡 Medium Priority</div>
+      <div class="stat-num">${mediumCount}</div>
+    </div>
+    <div class="control-stat-card low-stat">
+      <div class="stat-label">🟢 Low Priority</div>
+      <div class="stat-num" style="color:#10b981;">${lowCount}</div>
+    </div>
+    <div class="control-stat-card available-stat">
+      <div class="stat-label">🟢 Teams Available</div>
+      <div class="stat-num" style="color:#34d399;">${availableTeamsCount}</div>
+    </div>
+    <div class="control-stat-card busy-stat">
+      <div class="stat-label">🔴 Teams Busy</div>
+      <div class="stat-num" style="color:#f87171;">${busyTeamsCount}</div>
+    </div>
+    <div class="control-stat-card completed-stat">
+      <div class="stat-label">🏆 Completed Today</div>
+      <div class="stat-num" style="color:#60a5fa;">${completedTodayCount}</div>
     </div>
   `;
 }
+
 
 function renderEmergencies(root, data) {
   if (!data.length) {
@@ -524,17 +1122,17 @@ function buildEmergencyCard(e) {
 
   let actionsHTML = '';
   if (e.status === 'Case Closed') {
-    actionsHTML = statusBadge(e.status);
+    actionsHTML = `<div style="display:flex;align-items:center;gap:0.5rem;">${statusBadge(e.status)}</div>`;
   } else {
+    // Only show action buttons for cases that need supervisor decision
     let buttonsHTML = '';
     if (e.status === 'Pending Supervisor Approval' || e.status === 'Pending Review') {
       buttonsHTML = `
         <button class="btn-ec-approve" data-eid="${e.emergency_id}" data-action="approve">✅ Approve</button>
         <button class="btn-ec-close"   data-eid="${e.emergency_id}" data-action="close">✖ Close</button>
       `;
-    } else {
-      buttonsHTML = statusBadge(e.status);
     }
+    // For all other statuses, left side is empty — status dropdown on right is the single source of truth
 
     const statuses = [
       'Complaint Submitted',
@@ -543,13 +1141,15 @@ function buildEmergencyCard(e) {
       'Pending Review',
       'Auto Dispatched',
       'Team Assigned',
-      'Team Dispatched',
-      'Team Arrived',
-      'Rescue Completed',
+      'Mission Accepted',
+      'Start Journey',
+      'Reached Location',
+      'Rescue in Progress',
+      'Mission Completed',
       'Case Closed'
     ];
 
-    const options = statuses.map(st => 
+    const options = statuses.map(st =>
       `<option value="${st}" ${e.status === st ? 'selected' : ''}>${st}</option>`
     ).join('');
 
@@ -568,6 +1168,33 @@ function buildEmergencyCard(e) {
     `;
   }
 
+  // ── Team Roster Panel ──
+  const assignedUnit = e.nearest_rescue_team || e.recommended_team;
+  let rosterHTML = '';
+  if (assignedUnit) {
+    const assignReason = e.severity === 'Critical'
+      ? `<span style="color:#fca5a5;">🤖 Auto-dispatched by AI</span> — Critical priority case routed to least-loaded unit based on time burden scoring.`
+      : `<span style="color:#fcd34d;">👤 Supervisor Approved</span> — Assigned based on specialization match and current workload.`;
+
+    const memberBadges = e.team_members
+      ? e.team_members.split(',').map(m => `<span style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:0.15rem 0.55rem;font-size:0.72rem;white-space:nowrap;">${m.trim()}</span>`).join('')
+      : '<span style="color:var(--text-muted); font-size:0.78rem;">No roster data</span>';
+
+    rosterHTML = `
+      <div style="margin-top:0.75rem; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.75rem;">
+        <div style="font-size:0.72rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.5rem;">🚒 Assigned Team: ${assignedUnit}</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.4rem 1rem; font-size:0.78rem; margin-bottom:0.5rem;">
+          <div><span style="color:var(--text-muted);">👮 Leader:</span> <strong>${e.team_leader || '—'}</strong></div>
+          <div><span style="color:var(--text-muted);">🚐 Driver:</span> <strong>${e.team_driver || '—'}</strong></div>
+          <div style="grid-column:1/-1;"><span style="color:var(--text-muted);">🎯 Specialization:</span> ${e.team_specialization || '—'}</div>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:0.3rem; margin-bottom:0.5rem;">${memberBadges}</div>
+        <div style="font-size:0.75rem; color:var(--text-secondary); background:rgba(255,255,255,0.03); border-radius:6px; padding:0.4rem 0.6rem;">
+          <span style="font-weight:700;">📋 Assignment Reason:</span> ${assignReason}
+        </div>
+      </div>`;
+  }
+
   return `
     <div class="emergency-card sev-${sevClass}">
       <div class="ec-top">
@@ -584,12 +1211,32 @@ function buildEmergencyCard(e) {
       </div>
       <div class="ec-description">${e.description}</div>
       <div class="ec-meta-row">
-        <span class="ec-meta-item">🚒 Team: ${e.nearest_rescue_team || e.recommended_team}</span>
+        <span class="ec-meta-item">🚒 Team: ${assignedUnit || 'Unassigned'}</span>
         <span class="ec-meta-item">🏢 Depts: ${e.recommended_departments || 'N/A'}</span>
         <span class="ec-meta-item">⏱ ${e.response_time_minutes} min ETA</span>
         <span class="ec-meta-item">🎯 ${e.confidence_score}% confidence</span>
         ${e.landmark ? `<span class="ec-meta-item">📍 ${e.landmark}</span>` : ''}
       </div>
+
+      <!-- Gemini AI Diagnostics -->
+      <div style="margin-top:0.75rem; border-top:1px dashed rgba(255,255,255,0.06); padding-top:0.75rem; font-size:0.78rem; color:var(--text-secondary);">
+        <div style="margin-bottom:0.4rem;">
+          <span style="color:var(--rescue-primary); font-weight:700;">🧠 AI Decision Summary:</span> 
+          <span>${e.ai_decision_summary || 'No summary available.'}</span>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-top:0.4rem;">
+          <div style="background:rgba(239,68,68,0.03); border:1px solid rgba(239,68,68,0.08); padding:0.4rem; border-radius:4px;">
+            <span style="color:#fca5a5; font-weight:700; display:block; margin-bottom:0.15rem;">⚠️ Potential Risks:</span>
+            <span>${e.possible_risks || 'No immediate risks identified.'}</span>
+          </div>
+          <div style="background:rgba(16,185,129,0.03); border:1px solid rgba(16,185,129,0.08); padding:0.4rem; border-radius:4px;">
+            <span style="color:#6ee7b7; font-weight:700; display:block; margin-bottom:0.15rem;">🚒 Suggested Actions:</span>
+            <span>${e.suggested_actions || 'No suggested actions.'}</span>
+          </div>
+        </div>
+      </div>
+
+      ${rosterHTML}
       <div class="ec-actions">${actionsHTML}</div>
     </div>
   `;
@@ -704,63 +1351,174 @@ function initFilters(root, statsEl) {
 }
 
 // ─── RESCUE TEAM DASHBOARD ──────────────────────────────────
-let teamData = [];
-let selectedEid = null;
+let teamData       = [];
+let selectedEid    = null;
+let simulatedLocation = null;
+let currentTeamUnit   = null;   // Logged-in unit label
+let currentUnitId     = null;   // e.g. 'FIRE1'
+let currentPrimaryTeam = null;
+
+const UNIT_ICONS = {
+  'Fire Response Unit':           '🔥',
+  'Flood Rescue (NDRF)':          '🌊',
+  'SDRF Structural Response Team':'🏗️',
+  'Hazmat Response Unit':         '☢️',
+  'Emergency Response Team':      '🚑',
+  'Electrical Emergency Unit':    '⚡',
+  'Civic Emergency Team':         '🌳',
+};
+
+function getHaversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
 export async function initTeamDashboard() {
-  const listEl = document.getElementById('missions-list');
-  const detailsEl = document.getElementById('details-panel');
+  const listEl        = document.getElementById('missions-list');
+  const detailsEl     = document.getElementById('details-panel');
+  const loginScreen   = document.getElementById('login-screen');
+  const dashboardMain = document.getElementById('dashboard-main');
+  const loginForm     = document.getElementById('login-form');
+  const loginError    = document.getElementById('login-error');
+  const btnLogin      = document.getElementById('btn-login');
+  const btnLogout     = document.getElementById('btn-logout');
+
   if (!listEl) return;
+
+  // ── Restore session ──
+  const savedUnit  = sessionStorage.getItem('rescueTeamUnit');
+  const savedId    = sessionStorage.getItem('rescueUnitId');
+  const savedPrimary = sessionStorage.getItem('rescuePrimaryTeam');
+  if (savedUnit && savedId) {
+    currentTeamUnit    = savedUnit;
+    currentUnitId      = savedId;
+    currentPrimaryTeam = savedPrimary || '';
+    showDashboard();
+  }
+
+  // ── Login form submit ──
+  loginForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const unitId = document.getElementById('unit-id-input')?.value.trim().toUpperCase();
+    const pin    = document.getElementById('unit-pin-input')?.value.trim();
+    if (!unitId || !pin) return;
+
+    btnLogin.disabled = true;
+    btnLogin.textContent = '🔄 Verifying...';
+    loginError.style.display = 'none';
+
+    try {
+      const resp = await apiPost('/api/rescue/team/login', { unit_id: unitId, pin });
+      currentTeamUnit    = resp.unit_label;
+      currentUnitId      = resp.unit_id;
+      currentPrimaryTeam = resp.primary_team;
+      sessionStorage.setItem('rescueTeamUnit',    currentTeamUnit);
+      sessionStorage.setItem('rescueUnitId',      currentUnitId);
+      sessionStorage.setItem('rescuePrimaryTeam', currentPrimaryTeam);
+      showDashboard();
+    } catch (err) {
+      loginError.textContent = err.message || 'Login failed. Check your credentials.';
+      loginError.style.display = 'block';
+      btnLogin.disabled = false;
+      btnLogin.textContent = '🔓 Access Dashboard';
+    }
+  });
+
+  // ── Logout ──
+  btnLogout?.addEventListener('click', () => {
+    sessionStorage.removeItem('rescueTeamUnit');
+    sessionStorage.removeItem('rescueUnitId');
+    sessionStorage.removeItem('rescuePrimaryTeam');
+    currentTeamUnit = currentUnitId = currentPrimaryTeam = null;
+    selectedEid = null;
+    loginScreen.style.display  = 'flex';
+    dashboardMain.style.display = 'none';
+    if (btnLogin) { btnLogin.disabled = false; btnLogin.textContent = '🔓 Access Dashboard'; }
+    if (loginError) loginError.style.display = 'none';
+    document.getElementById('unit-id-input').value = '';
+    document.getElementById('unit-pin-input').value = '';
+  });
+
+  function showDashboard() {
+    loginScreen.style.display   = 'none';
+    dashboardMain.style.display = 'block';
+    // Set banner
+    const bannerLabel   = document.getElementById('banner-unit-label');
+    const bannerPrimary = document.getElementById('banner-primary-team');
+    const bannerIcon    = document.getElementById('banner-icon');
+    if (bannerLabel)   bannerLabel.textContent   = currentTeamUnit;
+    if (bannerPrimary) bannerPrimary.textContent  = currentPrimaryTeam;
+    if (bannerIcon)    bannerIcon.textContent     = UNIT_ICONS[currentPrimaryTeam] || '🚒';
+    loadMissions();
+    // Auto-refresh every 30s
+    setInterval(loadMissions, 30000);
+  }
 
   async function loadMissions() {
     try {
-      const emergencies = await apiGet('/api/rescue/emergencies');
-      
-      const priorityOrder = { 'critical': 0, 'high': 1, 'medium': 2, 'low': 3 };
-      teamData = emergencies.sort((a, b) => {
-        const pA = priorityOrder[a.severity.toLowerCase()] ?? 99;
-        const pB = priorityOrder[b.severity.toLowerCase()] ?? 99;
-        return pA - pB;
-      });
+      const resp = await apiGet(`/api/rescue/team/${encodeURIComponent(currentTeamUnit)}/missions`);
+      teamData = resp.missions || [];
 
-      const activeMissions = teamData.filter(e => e.status !== 'Case Closed');
-      
-      document.getElementById('mission-count').textContent = `${activeMissions.length} active`;
-      
-      if (!activeMissions.length) {
+      // Update workload banner
+      const chip = document.getElementById('workload-chip');
+      if (chip) {
+        const burden = resp.total_time_burden_minutes || 0;
+        const active = resp.active_count || 0;
+        chip.textContent = `${active} active · ${burden} min workload`;
+        chip.className   = 'workload-chip' + (burden > 30 ? ' busy' : '');
+      }
+      const cntEl = document.getElementById('mission-count');
+      if (cntEl) cntEl.textContent = `${teamData.length} missions`;
+
+      if (!teamData.length) {
         listEl.innerHTML = `
-          <div class="empty-state" style="padding: 2rem 1rem;">
+          <div class="empty-state" style="padding:2rem 1rem;">
             <div class="empty-icon">✅</div>
-            <p>No active missions assigned.</p>
+            <p>No missions assigned to your unit.</p>
           </div>`;
         detailsEl.innerHTML = `
-          <div class="empty-state" style="padding: 5rem 1rem;">
+          <div class="empty-state" style="padding:5rem 1rem;">
             <div class="empty-icon">🚒</div>
-            <h3>No Mission Selected</h3>
-            <p style="color:var(--text-muted); font-size:0.85rem; margin-top:0.5rem;">Select an active mission from the left panel to begin field operations.</p>
+            <h3>All Clear!</h3>
+            <p style="color:var(--text-muted); font-size:0.85rem; margin-top:0.5rem;">No active missions. The AI will dispatch cases here automatically.</p>
           </div>`;
         return;
       }
 
-      listEl.innerHTML = activeMissions.map(m => {
-        const activeClass = selectedEid === m.emergency_id ? 'active' : '';
+      // Render mission queue (read-only — AI-assigned, no manual picking)
+      listEl.innerHTML = teamData.map((m, idx) => {
         const sev = m.severity.toLowerCase();
-        
+        const isActive = idx === 0 || m.emergency_id === selectedEid;
+        const activeClass = m.emergency_id === selectedEid ? 'active' : '';
+        const autoTag = m.severity === 'Critical'
+          ? `<span style="font-size:0.65rem; background:rgba(239,68,68,0.15); color:#fca5a5; border:1px solid rgba(239,68,68,0.3); border-radius:20px; padding:0.1rem 0.5rem; margin-left:0.35rem;">AUTO</span>`
+          : '';
         return `
-          <div class="mission-item ${activeClass} border-severity-${sev}" data-eid="${m.emergency_id}" style="padding: 1rem; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-left: 4px solid var(--border-color, #fff); border-radius: 8px; cursor: pointer; transition: all 0.2s ease; margin-bottom: 0.5rem;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.35rem;">
-              <span style="font-weight: 700; font-family: monospace; color: var(--rescue-primary);">${m.emergency_id}</span>
+          <div class="mission-item ${activeClass} border-severity-${sev}" data-eid="${m.emergency_id}"
+            style="padding:1rem; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05);
+                   border-left:4px solid var(--border-color,#fff); border-radius:8px;
+                   cursor:pointer; transition:all 0.2s ease;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem;">
+              <span style="font-weight:700; font-family:monospace; color:var(--rescue-primary);">${m.emergency_id}${autoTag}</span>
               ${severityBadge(m.severity)}
             </div>
-            <div style="font-size: 0.9rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">${m.incident_type}</div>
-            <div style="font-size: 0.78rem; color: var(--text-muted); display: flex; justify-content: space-between; align-items:center;">
-              <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;">📍 ${m.landmark || 'No landmark'}</span>
-              <span>${statusBadge(m.status)}</span>
+            <div style="font-size:0.88rem; font-weight:700; color:var(--text-primary); margin-bottom:0.2rem;">${m.incident_type}</div>
+            <div style="font-size:0.75rem; color:var(--text-muted); display:flex; justify-content:space-between;">
+              <span>📍 ${m.landmark || 'No landmark'}</span>
+              ${statusBadge(m.status)}
             </div>
-          </div>
-        `;
+            ${m.response_time_minutes ? `<div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.25rem;">⏱ Est. ${m.response_time_minutes} min response</div>` : ''}
+          </div>`;
       }).join('');
 
+      // Click to view details
       document.querySelectorAll('.mission-item').forEach(item => {
         item.addEventListener('click', () => {
           selectedEid = item.dataset.eid;
@@ -770,9 +1528,12 @@ export async function initTeamDashboard() {
         });
       });
 
-      if (selectedEid) {
-        renderDetails();
+      // Auto-display the top-priority mission (first in sorted list)
+      if (!selectedEid || !teamData.find(m => m.emergency_id === selectedEid)) {
+        selectedEid = teamData[0].emergency_id;
       }
+      document.querySelector(`.mission-item[data-eid="${selectedEid}"]`)?.classList.add('active');
+      renderDetails();
 
     } catch (err) {
       listEl.innerHTML = `
@@ -794,6 +1555,20 @@ export async function initTeamDashboard() {
         </div>`;
       return;
     }
+
+    // Parse complete Gemini JSON response
+    let gemini = {};
+    try {
+      if (m.ai_analysis_json) {
+        gemini = JSON.parse(m.ai_analysis_json);
+      }
+    } catch (err) {
+      console.error("Error parsing ai_analysis_json in team dashboard:", err);
+    }
+
+    const aiSummary = gemini.ai_summary || m.ai_decision_summary || 'No summary available.';
+    const risks = Array.isArray(gemini.possible_risks) ? gemini.possible_risks.join(', ') : (m.possible_risks || 'No risks reported.');
+    const actions = Array.isArray(gemini.suggested_rescue_actions) ? gemini.suggested_rescue_actions.join(', ') : (m.suggested_actions || 'No suggested rescue actions.');
 
     const sev = m.severity.toLowerCase();
     
@@ -903,14 +1678,27 @@ export async function initTeamDashboard() {
 
         <div style="background: rgba(245, 158, 11, 0.04); border: 1px solid rgba(245, 158, 11, 0.15); border-radius: 8px; padding: 0.85rem; font-size: 0.82rem;">
           <h4 style="color: var(--rescue-primary); margin:0 0 0.5rem 0; font-size:0.88rem; font-weight:700; display:flex; justify-content:space-between;">
-            <span>🤖 AI Dispatch Summary</span>
+            <span>🧠 Gemini AI Dispatch Diagnostics</span>
             <span style="color:var(--rescue-primary); font-weight:700;">Confidence: ${m.confidence_score}%</span>
           </h4>
-          <div style="display:flex; flex-direction:column; gap:0.35rem; color: var(--text-secondary);">
-            <span><strong>Priority:</strong> ${m.severity}</span>
+          <div style="display:flex; flex-direction:column; gap:0.5rem; color: var(--text-secondary);">
+            <span><strong>Incident Type:</strong> <span>${m.incident_type}</span></span>
+            <span><strong>Severity:</strong> <span style="color:#ef4444; font-weight:700;">${m.severity}</span></span>
+            <span><strong>AI Summary:</strong> ${aiSummary}</span>
+            <span><strong>Possible Risks:</strong> <span style="color:#fca5a5;">${risks}</span></span>
+            <span><strong>Suggested Rescue Actions:</strong> <span style="color:#6ee7b7;">${actions}</span></span>
+            <span><strong>Estimated Response Time:</strong> <span>${m.response_time_minutes} minutes</span></span>
             <span><strong>Dispatch Type:</strong> ${dispatchType}</span>
-            <span><strong>Assignment Reason:</strong> Keyword check matched incident type context "${m.incident_type}".</span>
           </div>
+        </div>
+
+        <!-- Embedded Google Map -->
+        <div>
+          <div style="color:var(--text-muted); font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.35rem;">📍 Mission Location Map</div>
+          <div id="team-map" style="width:100%; height:220px; border-radius:8px; background:rgba(0,0,0,0.1); border:1px solid rgba(255,255,255,0.05); margin-bottom:0.5rem;"></div>
+          <button class="team-btn" id="btn-navigate-gmaps" style="width:100%; margin-top:0.25rem; background:linear-gradient(135deg,#3b82f6,#1d4ed8); border:none; font-weight:700; color:#ffffff; font-size:0.8rem; display:flex; align-items:center; justify-content:center; gap:0.4rem; padding:0.6rem 1rem; cursor:pointer; border-radius:8px;">
+            🚗 Navigate to Scene
+          </button>
         </div>
 
         <div>
@@ -918,6 +1706,12 @@ export async function initTeamDashboard() {
           <div class="team-timeline-stepper" style="display:flex; gap:0.5rem; overflow-x:auto; padding-bottom:0.5rem;">
             ${timelineHTML}
           </div>
+        </div>
+
+        <!-- Geolocation Tracker Box -->
+        <div id="distance-tracker-box" style="margin-bottom: 0.5rem; font-size: 0.82rem; padding: 0.6rem 0.85rem; background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.15); border-radius: 8px; display: none; justify-content: space-between; align-items: center; flex-wrap:wrap; gap: 0.5rem;">
+          <span>📍 <strong>Distance to scene:</strong> <span id="distance-value">Checking GPS...</span></span>
+          <button class="team-btn btn-secondary" id="btn-simulate-gps" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; margin: 0; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);">🎯 Simulate GPS at Scene</button>
         </div>
 
         <div>
@@ -930,7 +1724,7 @@ export async function initTeamDashboard() {
             <button class="team-btn ${btnJourneyActive}" id="act-journey" data-status="Start Journey">
               ⚡ Start Journey
             </button>
-            <button class="team-btn ${btnArrivedActive}" id="act-arrived" data-status="Reached Location">
+            <button class="team-btn btn-disabled" id="act-arrived" data-status="Reached Location" disabled>
               📍 Reached Location
             </button>
             <button class="team-btn ${btnProgressActive}" id="act-progress" data-status="Rescue in Progress">
@@ -952,6 +1746,114 @@ export async function initTeamDashboard() {
 
       </div>
     `;
+
+    // Render Map at scene
+    if (m.lat && m.lng) {
+      setTimeout(() => {
+        const pos = { lat: parseFloat(m.lat), lng: parseFloat(m.lng) };
+        renderUnifiedMap('team-map', pos, 15, [
+          {
+            pos: pos,
+            title: m.incident_type,
+            color: m.severity === 'Critical' ? '#ef4444' : '#fb923c',
+            info: `<div style="color:#000; font-size:0.82rem; line-height:1.4;"><strong>${m.incident_type}</strong><br>Severity: ${m.severity}</div>`
+          }
+        ]);
+        
+        // Bind Navigate button click
+        document.getElementById('btn-navigate-gmaps')?.addEventListener('click', () => {
+          window.open(`https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lng}`, '_blank');
+        });
+      }, 50);
+    }
+
+
+
+    // Distance computation and activation checks
+    function checkDistanceAndRender() {
+      const distBox = document.getElementById('distance-tracker-box');
+      const distValEl = document.getElementById('distance-value');
+      const actArrivedBtn = document.getElementById('act-arrived');
+      
+      if (!m.lat || !m.lng) {
+        if (distBox) distBox.style.display = 'none';
+        if (actArrivedBtn && (m.status === 'Start Journey' || m.status === 'Team Dispatched')) {
+          actArrivedBtn.className = 'team-btn btn-active';
+          actArrivedBtn.removeAttribute('disabled');
+        }
+        return;
+      }
+      
+      if (distBox) distBox.style.display = 'flex';
+      
+      // Default to Hyderabad center if no GPS yet
+      let crewLat = 17.3850;
+      let crewLng = 78.4867;
+      
+      if (simulatedLocation) {
+        crewLat = simulatedLocation.lat;
+        crewLng = simulatedLocation.lng;
+      } else if (navigator.geolocation) {
+        // Use watchPosition for continuous live GPS monitoring during journey
+        navigator.geolocation.watchPosition(pos => {
+          if (!simulatedLocation) {
+            updateDistance(pos.coords.latitude, pos.coords.longitude);
+          }
+        }, err => {
+          // Fallback: use Hyderabad center if GPS unavailable
+          updateDistance(crewLat, crewLng);
+        }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 });
+        return;
+      }
+      
+      updateDistance(crewLat, crewLng);
+      
+      function updateDistance(clat, clng) {
+        const dist = getHaversineDistance(clat, clng, m.lat, m.lng);
+        const nearScene = dist <= 0.15; // 150m
+        
+        if (distValEl) {
+          if (nearScene) {
+            distValEl.innerHTML = `<span style="color:var(--color-success); font-weight:700;">📍 Arrived (${(dist*1000).toFixed(0)}m away)</span>`;
+            if (distBox) distBox.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+          } else {
+            distValEl.textContent = `${dist.toFixed(2)} km away`;
+            if (distBox) distBox.style.borderColor = 'rgba(59, 130, 246, 0.15)';
+          }
+        }
+        
+        if (actArrivedBtn) {
+          if (m.status === 'Start Journey' || m.status === 'Team Dispatched') {
+            if (nearScene) {
+              actArrivedBtn.className = 'team-btn btn-active';
+              actArrivedBtn.removeAttribute('disabled');
+              
+              // AUTO-CLICK: Automatically trigger Reached Location update
+              if (!actArrivedBtn.dataset.autoTriggered) {
+                actArrivedBtn.dataset.autoTriggered = 'true';
+                showToast('📍 Arrived at scene! Status auto-updating to Reached Location...', 'success');
+                setTimeout(async () => {
+                  try {
+                    await apiPatch(`/api/rescue/emergencies/${selectedEid}`, {
+                      status: 'Reached Location',
+                      note: 'Auto-triggered: Crew GPS within 150m of incident scene.',
+                      actor: 'GPS Auto-Detection'
+                    });
+                    showToast('✅ Status updated: Reached Location', 'success');
+                    await loadMissions();
+                  } catch (err) {
+                    showToast(`Auto-update failed: ${err.message}`, 'error');
+                  }
+                }, 1500); // slight delay so crew sees the toast first
+              }
+            } else {
+              actArrivedBtn.className = 'team-btn btn-disabled';
+              actArrivedBtn.setAttribute('disabled', 'true');
+            }
+          }
+        }
+      }
+    }
 
     document.querySelectorAll('.team-btn[data-status]').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -980,6 +1882,14 @@ export async function initTeamDashboard() {
 
     document.getElementById('act-contact')?.addEventListener('click', () => {
       alert('📞 Control Room Emergency Hotline: +91 40-23456789 (GovConnect HQ)');
+    });
+
+    checkDistanceAndRender();
+
+    document.getElementById('btn-simulate-gps')?.addEventListener('click', () => {
+      simulatedLocation = { lat: m.lat, lng: m.lng };
+      showToast('GPS simulated at incident location!', 'success');
+      checkDistanceAndRender();
     });
   }
 
