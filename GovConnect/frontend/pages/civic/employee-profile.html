@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GovConnect – Employee Profile Portfolio</title>
+  
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/civic.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body style="min-height: 100vh; display: flex; flex-direction: column;">
+
+  <!-- Shared Navbar Injection -->
+  <div id="navbar-placeholder"></div>
+
+  <main class="container" style="margin-top: 2rem; margin-bottom: 3rem; flex-grow: 1;">
+    <section class="module-header">
+      <a href="#" onclick="window.close()" class="back-link">&larr; Close Window</a>
+      <div class="module-title-row">
+        <h2>Employee Profile Portfolio</h2>
+        <span class="module-badge civic" id="emp-profile-id">EMP000</span>
+      </div>
+    </section>
+
+    <!-- Main Profile Workspace -->
+    <div style="display: grid; grid-template-columns: 300px 1fr; gap: 2rem;" id="profile-container">
+      
+      <!-- Left side: Card details -->
+      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        
+        <!-- Personal Info Card -->
+        <div class="glass-card" style="text-align: center; padding: 2rem 1.5rem;">
+          <img id="emp-photo" src="https://via.placeholder.com/150" alt="Profile Photo" style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid var(--color-civic); margin: 0 auto 1rem auto; display: block;">
+          <h3 id="emp-name" style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.25rem;">-</h3>
+          <p id="emp-designation" style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">-</p>
+          <hr style="border:0; border-top:1px solid var(--border-color); margin-bottom:1rem;">
+          
+          <div style="display: flex; justify-content: space-around; text-align: center;">
+            <div>
+              <span style="font-size: 0.65rem; color: var(--text-muted); display: block; text-transform: uppercase;">Rating</span>
+              <strong id="emp-rating" style="font-size: 1.1rem; color: #fbbf24;">0.0 / 5</strong>
+            </div>
+            <div>
+              <span style="font-size: 0.65rem; color: var(--text-muted); display: block; text-transform: uppercase;">Experience</span>
+              <strong id="emp-experience" style="font-size: 1.1rem; color: #fff;">0 Years</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Professional status -->
+        <div class="glass-card" style="padding: 1.5rem;">
+          <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; color: var(--text-secondary);"><i class="fa-solid fa-briefcase"></i> Office Affiliation</h4>
+          <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.85rem;">
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-muted);">Department:</span>
+              <span style="font-weight: 600; color: #fff;">Civic & Mandal</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-muted);">Specialization:</span>
+              <span style="font-weight: 600; color: #fff; text-align: right;" id="emp-specialization">-</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-muted);">Attendance:</span>
+              <span style="font-weight: 600; color: var(--color-success);" id="emp-attendance">100%</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-muted);">Current Status:</span>
+              <span class="badge-status working" id="emp-status">Available</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right side: Performance graphs & Tasks lists -->
+      <div style="display: flex; flex-direction: column; gap: 2rem;">
+        
+        <!-- Metrics stats Grid -->
+        <div class="analytics-grid" style="margin-bottom: 0;">
+          <div class="glass-card analytics-card normal" style="padding: 1rem 1.25rem;">
+            <div class="info">
+              <h5>Avg Resolution Time</h5>
+              <div class="value" id="stat-avg-time">0.0 hrs</div>
+            </div>
+            <div class="icon"><i class="fa-solid fa-stopwatch"></i></div>
+          </div>
+          <div class="glass-card analytics-card success" style="padding: 1rem 1.25rem;">
+            <div class="info">
+              <h5>Efficiency rate</h5>
+              <div class="value" id="stat-efficiency">0%</div>
+            </div>
+            <div class="icon"><i class="fa-solid fa-bolt"></i></div>
+          </div>
+          <div class="glass-card analytics-card normal" style="padding: 1rem 1.25rem;">
+            <div class="info">
+              <h5>Active Workload</h5>
+              <div class="value" id="stat-active-workload">0 Tasks</div>
+            </div>
+            <div class="icon"><i class="fa-solid fa-list-check"></i></div>
+          </div>
+        </div>
+
+        <!-- Performance Trends (Charts) -->
+        <div class="charts-grid" style="margin-top: 0;">
+          <div class="glass-card chart-card">
+            <h4>Weekly Resolution Performance</h4>
+            <div class="chart-container">
+              <canvas id="chart-weekly-efficiency"></canvas>
+            </div>
+          </div>
+          <div class="glass-card chart-card">
+            <h4>Monthly Ratings History</h4>
+            <div class="chart-container">
+              <canvas id="chart-monthly-ratings"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Task lists history -->
+        <div class="glass-card">
+          <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; color: var(--text-secondary);"><i class="fa-solid fa-clock-rotate-left"></i> Completed Operations Ledger</h4>
+          <div class="table-wrapper" style="margin-bottom: 0;">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Category</th>
+                  <th>Description</th>
+                  <th>Priority</th>
+                  <th>Completed On</th>
+                  <th>Feedback Rating</th>
+                </tr>
+              </thead>
+              <tbody id="completed-ledger-body">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Shared Footer Injection -->
+  <div id="footer-placeholder"></div>
+
+  <!-- Scripts -->
+  <script src="../../components/navbar.js"></script>
+  <script src="../../components/footer.js"></script>
+  
+  <script type="module">
+    const API_BASE = "http://127.0.0.1:5000";
+    
+    document.addEventListener("DOMContentLoaded", async () => {
+      // Parse employee ID
+      const params = new URLSearchParams(window.location.search);
+      const empId = params.get("id");
+      
+      if (!empId) {
+        document.getElementById("profile-container").innerHTML = `<div class="empty-state" style="grid-column: 1/-1;"><i class="fa-solid fa-user-slash"></i> Missing Employee ID in parameters.</div>`;
+        return;
+      }
+      
+      try {
+        const res = await fetch(`${API_BASE}/api/civic/employees/${empId}`);
+        if (!res.ok) throw new Error();
+        const emp = await res.json();
+        
+        // Populate profile cards
+        document.getElementById("emp-profile-id").textContent = emp.employee_id;
+        document.getElementById("emp-name").textContent = emp.full_name;
+        document.getElementById("emp-photo").src = emp.profile_photo || 'https://via.placeholder.com/150';
+        document.getElementById("emp-designation").textContent = emp.designation;
+        document.getElementById("emp-rating").textContent = `${emp.rating.toFixed(1)} / 5.0`;
+        document.getElementById("emp-experience").textContent = `${emp.experience_years} Years`;
+        document.getElementById("emp-specialization").textContent = emp.specialization;
+        document.getElementById("emp-attendance").textContent = `${emp.attendance_percentage}%`;
+        
+        const statusBadge = document.getElementById("emp-status");
+        statusBadge.textContent = emp.status;
+        statusBadge.className = `badge-status ${emp.status.toLowerCase().replace(' ', '')}`;
+        
+        // Populate stats metrics
+        document.getElementById("stat-avg-time").textContent = `${emp.avg_resolution_time.toFixed(1)} hours`;
+        document.getElementById("stat-efficiency").textContent = `${emp.efficiency_percentage}%`;
+        document.getElementById("stat-active-workload").textContent = `${emp.current_tasks.length} active`;
+        
+        // Render completed tasks table
+        const tbody = document.getElementById("completed-ledger-body");
+        tbody.innerHTML = "";
+        
+        if (emp.completed_tasks.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" class="empty-state"><i class="fa-solid fa-folder-open"></i> No completed history found for this officer.</td></tr>`;
+        } else {
+          emp.completed_tasks.forEach(t => {
+            const dateStr = new Date(t.expected_completion || t.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+            const ratingStr = t.citizen_rating ? `<span style="color:#fbbf24;"><i class="fa-solid fa-star"></i> ${t.citizen_rating}/5</span>` : '<span style="color:var(--text-muted);">None</span>';
+            
+            tbody.innerHTML += `
+              <tr>
+                <td><strong>#${t.id}</strong></td>
+                <td>${t.category}</td>
+                <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${t.description}</td>
+                <td><span class="badge-status ${t.priority.toLowerCase()}">${t.priority}</span></td>
+                <td>${dateStr}</td>
+                <td>${ratingStr}</td>
+              </tr>
+            `;
+          });
+        }
+        
+        // Render Chart.js graphs
+        renderPerformanceCharts(emp);
+        
+      } catch (err) {
+        console.error(err);
+        document.getElementById("profile-container").innerHTML = `<div class="empty-state" style="grid-column: 1/-1;"><i class="fa-solid fa-triangle-exclamation"></i> Error loading profile folder details.</div>`;
+      }
+    });
+
+    function renderPerformanceCharts(emp) {
+      // 1. Weekly efficiency chart
+      const ctxWeek = document.getElementById("chart-weekly-efficiency").getContext("2d");
+      new Chart(ctxWeek, {
+        type: 'line',
+        data: {
+          labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+          datasets: [{
+            label: 'Resolution Rate %',
+            data: [90, 94, emp.efficiency_percentage, 88, 95, 92],
+            borderColor: '#3b82f6',
+            tension: 0.25,
+            fill: false
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+          },
+          plugins: { legend: { display: false } }
+        }
+      });
+
+      // 2. Monthly ratings chart
+      const ctxMonth = document.getElementById("chart-monthly-ratings").getContext("2d");
+      new Chart(ctxMonth, {
+        type: 'bar',
+        data: {
+          labels: ['Apr', 'May', 'Jun', 'Jul'],
+          datasets: [{
+            label: 'Average Score',
+            data: [4.4, 4.7, 4.5, emp.rating],
+            backgroundColor: 'rgba(245, 158, 11, 0.6)',
+            borderColor: '#f59e0b',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+          },
+          plugins: { legend: { display: false } }
+        }
+      });
+    }
+  </script>
+</body>
+</html>

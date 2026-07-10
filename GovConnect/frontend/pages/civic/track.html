@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GovConnect – Track Grievance Live Status</title>
+  
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/civic.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body style="min-height: 100vh; display: flex; flex-direction: column;">
+
+  <!-- Shared Navbar Injection -->
+  <div id="navbar-placeholder"></div>
+
+  <main class="container" style="margin-top: 2rem; margin-bottom: 3rem; flex-grow: 1;">
+    <section class="module-header">
+      <a href="#" onclick="window.close()" class="back-link">&larr; Close Window</a>
+      <div class="module-title-row">
+        <h2>Live Tracker Portal</h2>
+        <span class="module-badge civic" id="track-complaint-id">Complaint #000</span>
+      </div>
+    </section>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;" id="tracker-workspace">
+      
+      <!-- Left Column: Timelines & Status Stepper -->
+      <div class="glass-card tracking-timeline-box" style="margin: 0; width: 100%; max-width: 100%;">
+        <h3 style="margin-bottom: 1.5rem;"><i class="fa-solid fa-route" style="color: var(--color-civic);"></i> Grievance Status Timeline</h3>
+        
+        <div class="work-progress-stepper" id="timeline-stepper">
+          <!-- Stepper steps populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Right Column: Verification Images & Officer details -->
+      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        
+        <!-- Complaint Detail Card -->
+        <div class="glass-card" style="padding: 1.5rem;">
+          <h4 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem;" id="comp-title">-</h4>
+          <span class="badge-status submitted" id="comp-category">-</span>
+          <span class="badge-status critical" id="comp-priority">-</span>
+          <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 1rem;" id="comp-description">-</p>
+          
+          <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 1rem 0;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between;">
+            <span>Reported On: <strong id="comp-created">-</strong></span>
+            <span>Expected SLA: <strong id="comp-sla">-</strong></span>
+          </div>
+        </div>
+
+        <!-- Assigned Officer details -->
+        <div class="glass-card" id="officer-detail-card" style="display: none;">
+          <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; color: var(--text-secondary);"><i class="fa-solid fa-user-shield"></i> Assigned Field Operator</h4>
+          <div style="display: flex; gap: 1rem; align-items: center;">
+            <img id="off-photo" src="https://via.placeholder.com/150" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 2px solid var(--color-civic);">
+            <div>
+              <h5 id="off-name" style="font-size: 0.95rem; font-weight: 700;">Ravi Kumar</h5>
+              <p id="off-designation" style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Assistant Engineer (Roads)</p>
+              <span id="off-rating" style="font-size: 0.75rem; color: #fbbf24;"><i class="fa-solid fa-star"></i> 4.8 / 5</span>
+              <span id="off-experience" style="font-size: 0.75rem; color: var(--text-muted); margin-left: 0.5rem;">| 6 yrs exp</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Image Verifications -->
+        <div class="glass-card" id="image-verification-card">
+          <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; color: var(--text-secondary);"><i class="fa-solid fa-images"></i> Photographic Audits</h4>
+          
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem;">
+            <div>
+              <span style="font-size: 0.7rem; color: var(--text-muted); display: block; text-align: center; margin-bottom: 0.25rem;">Before Repair</span>
+              <div class="image-preview-box" style="height: 100px; margin-top: 0;" id="box-before-img">
+                <span style="font-size: 0.65rem; text-align: center;">No Image</span>
+              </div>
+            </div>
+            
+            <div>
+              <span style="font-size: 0.7rem; color: var(--text-muted); display: block; text-align: center; margin-bottom: 0.25rem;">In Progress</span>
+              <div class="image-preview-box" style="height: 100px; margin-top: 0;" id="box-progress-img">
+                <span style="font-size: 0.65rem; text-align: center;">No Image</span>
+              </div>
+            </div>
+            
+            <div>
+              <span style="font-size: 0.7rem; color: var(--text-muted); display: block; text-align: center; margin-bottom: 0.25rem;">Completed</span>
+              <div class="image-preview-box" style="height: 100px; margin-top: 0;" id="box-completed-img">
+                <span style="font-size: 0.65rem; text-align: center;">No Image</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Audit log trail -->
+        <div class="glass-card" id="audit-trail-card">
+          <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; color: var(--text-secondary);"><i class="fa-solid fa-receipt"></i> Resolution Audit Records</h4>
+          <div id="tracker-audit-trail" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 200px; overflow-y: auto;">
+            <!-- list of logs -->
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Shared Footer Injection -->
+  <div id="footer-placeholder"></div>
+
+  <!-- Scripts -->
+  <script src="../../components/navbar.js"></script>
+  <script src="../../components/footer.js"></script>
+  
+  <script type="module">
+    const API_BASE = "http://127.0.0.1:5000";
+    
+    document.addEventListener("DOMContentLoaded", async () => {
+      const params = new URLSearchParams(window.location.search);
+      const cid = params.get("id");
+      
+      if (!cid) {
+        document.getElementById("tracker-workspace").innerHTML = `<div class="empty-state" style="grid-column: 1/-1;"><i class="fa-solid fa-triangle-exclamation"></i> Missing complaint ID parameters.</div>`;
+        return;
+      }
+      
+      try {
+        const res = await fetch(`${API_BASE}/api/civic/complaints/${cid}`);
+        if (!res.ok) throw new Error();
+        const comp = await res.json();
+        
+        // Fill details
+        document.getElementById("track-complaint-id").textContent = `Complaint #${comp.id}`;
+        document.getElementById("comp-title").textContent = comp.title;
+        document.getElementById("comp-category").textContent = comp.category;
+        document.getElementById("comp-priority").textContent = comp.priority;
+        document.getElementById("comp-priority").className = `badge-status ${comp.priority.toLowerCase()}`;
+        document.getElementById("comp-description").textContent = comp.description;
+        
+        const createdDate = new Date(comp.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const deadlineDate = new Date(comp.deadline).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        
+        document.getElementById("comp-created").textContent = createdDate;
+        document.getElementById("comp-sla").textContent = deadlineDate;
+        
+        // Render Assigned Officer Info
+        if (comp.assigned_employee) {
+          const emp = comp.assigned_employee;
+          document.getElementById("officer-detail-card").style.display = "block";
+          document.getElementById("off-name").textContent = emp.employee_name;
+          document.getElementById("off-photo").src = emp.profile_photo || 'https://via.placeholder.com/150';
+          document.getElementById("off-designation").textContent = emp.designation;
+          document.getElementById("off-rating").innerHTML = `<i class="fa-solid fa-star"></i> ${emp.rating.toFixed(1)} / 5.0`;
+          document.getElementById("off-experience").textContent = `| ${emp.experience_years} yrs experience`;
+        }
+        
+        // Render Images Verifications
+        renderImage(document.getElementById("box-before-img"), comp.before_image || comp.image_path);
+        renderImage(document.getElementById("box-progress-img"), comp.progress_image);
+        renderImage(document.getElementById("box-completed-img"), comp.completion_image);
+        
+        // Compile tracking steps stepper
+        compileTimelineStepper(comp.status);
+        
+        // Render audit trail logs
+        const auditBox = document.getElementById("tracker-audit-trail");
+        auditBox.innerHTML = "";
+        
+        if (comp.audit_logs.length === 0) {
+          auditBox.innerHTML = `<span style="font-size:0.75rem; color:var(--text-muted);">No audit trails logged.</span>`;
+        } else {
+          comp.audit_logs.forEach(log => {
+            const timeStr = new Date(log.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            auditBox.innerHTML += `
+              <div style="font-size:0.75rem; border-bottom:1px solid var(--border-color); padding: 0.35rem 0;">
+                <div style="display:flex; justify-content:space-between; align-items:center; font-weight:600; color:#fff;">
+                  <span>${log.action}</span>
+                  <span style="font-size:0.65rem; color:var(--text-muted);">${timeStr}</span>
+                </div>
+                <p style="color:var(--text-secondary); margin-top:0.15rem;">${log.reason || 'Workflow progression'}</p>
+                <span style="font-size:0.65rem; color:var(--text-muted);">Operator: ${log.actor}</span>
+              </div>
+            `;
+          });
+        }
+        
+      } catch (err) {
+        console.error(err);
+        document.getElementById("tracker-workspace").innerHTML = `<div class="empty-state" style="grid-column: 1/-1;"><i class="fa-solid fa-triangle-exclamation"></i> Grievance record not found.</div>`;
+      }
+    });
+
+    function renderImage(container, src) {
+      if (src) {
+        container.innerHTML = `<img src="${src}" style="width:100%; height:100%; object-fit:cover;">`;
+      }
+    }
+
+    // Ordered timeline steps
+    const STEPS_FLOW = [
+      { name: "Submitted", desc: "Citizen reported grievance to municipal cell." },
+      { name: "AI Categorized", desc: "Autonomous matching engine classified issue category." },
+      { name: "Pending Admin Review", desc: "Awaiting supervisor task allocation review." },
+      { name: "Assigned Employee", desc: "Municipal supervisor allocated task to field officer." },
+      { name: "Employee Accepted", desc: "Field officer confirmed assignment acceptance." },
+      { name: "Travelling", desc: "Field officer is en-route to the grievance coordinates." },
+      { name: "Reached Location", desc: "Officer arrived at location to inspect damage." },
+      { name: "Working", desc: "Municipal repairs and correction work is underway." },
+      { name: "Resolved", desc: "Work completed by field crew. Verification uploaded." },
+      { name: "Verified", desc: "Supervisor confirmed repairs comply with standards." },
+      { name: "Closed", desc: "Complaint officially completed and closed." }
+    ];
+
+    function compileTimelineStepper(currentStatus) {
+      const stepper = document.getElementById("timeline-stepper");
+      stepper.innerHTML = "";
+      
+      // Determine index of current status
+      let currentIdx = STEPS_FLOW.findIndex(s => s.name === currentStatus);
+      if (currentIdx === -1) {
+        // If status name has slight differences (like "Work Started", "Reached Location" vs "Working"), handle them
+        if (currentStatus === "Work Started") currentIdx = 7;
+        else currentIdx = 0;
+      }
+      
+      STEPS_FLOW.forEach((step, idx) => {
+        const item = document.createElement("div");
+        item.className = "progress-step-item";
+        
+        if (idx < currentIdx) {
+          item.classList.add("completed");
+        } else if (idx === currentIdx) {
+          item.classList.add("active");
+        }
+        
+        item.innerHTML = `
+          <div class="progress-step-title">${step.name}</div>
+          <div class="progress-step-desc">${step.desc}</div>
+        `;
+        stepper.appendChild(item);
+      });
+    }
+  </script>
+</body>
+</html>

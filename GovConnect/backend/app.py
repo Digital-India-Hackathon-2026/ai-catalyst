@@ -4,10 +4,14 @@ from config import Config
 from routes.civic import civic_bp
 from routes.rescue import rescue_bp
 from routes.medical import medical_bp
+from db import init_db
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+    
+    # Initialize SQLite database
+    init_db()
     
     # Enable Cross-Origin Resource Sharing (CORS) for development
     CORS(app, resources={r"/api/*": {"origins": "*"}})
