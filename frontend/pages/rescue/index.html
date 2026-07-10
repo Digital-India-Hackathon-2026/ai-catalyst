@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rescue Portal – Report Emergency | GovConnect</title>
+  <meta name="description" content="Report a rescue emergency. Our AI engine will classify the incident and dispatch the right rescue team instantly.">
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/rescue.css">
+</head>
+<body>
+
+  <!-- Shared Navbar -->
+  <div id="navbar-placeholder"></div>
+
+  <!-- AI Processing Overlay -->
+  <div class="ai-processing-overlay" id="ai-processing-overlay">
+    <div class="ai-processing-ring"></div>
+    <div class="ai-processing-text">
+      <h3>🧠 AI Analysing Emergency</h3>
+      <p>Please wait while our engine classifies your report…</p>
+    </div>
+    <div class="ai-processing-steps">
+      <div class="ai-step-item" id="step-1">🔍 Scanning emergency description…</div>
+      <div class="ai-step-item" id="step-2">📡 Matching incident keywords…</div>
+      <div class="ai-step-item" id="step-3">⚖️ Assigning severity level…</div>
+      <div class="ai-step-item" id="step-4">🚒 Selecting rescue team…</div>
+      <div class="ai-step-item" id="step-5">✅ Decision policy applied…</div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <main class="container rescue-page">
+
+    <!-- Module Header -->
+    <section class="module-header">
+      <a href="../../index.html" class="back-link">← Back to Portal</a>
+      <div class="module-title-row">
+        <h1>🚨 Rescue Emergency Portal</h1>
+        <span class="module-badge rescue">Rescue &amp; Emergency</span>
+      </div>
+      <p style="color:var(--text-secondary);font-size:0.95rem;margin-top:0.5rem;">
+        Report a disaster, fire, flood, accident or structural emergency. Our AI will classify and dispatch the right team.
+      </p>
+    </section>
+
+    <!-- Quick nav links -->
+    <div style="display:flex;gap:0.75rem;margin-bottom:2rem;flex-wrap:wrap;">
+      <a href="control-room.html" class="btn btn-outline" style="font-size:0.82rem;padding:.4rem .9rem;">🖥 Control Room</a>
+      <a href="track.html" class="btn btn-outline" style="font-size:0.82rem;padding:.4rem .9rem;">📡 Track Emergency</a>
+    </div>
+
+    <div class="rescue-section-title">📋 Submit Emergency Report</div>
+
+    <!-- Submission Layout -->
+    <div class="submission-layout">
+
+      <!-- LEFT: Form -->
+      <form id="rescue-submit-form">
+
+        <!-- Description -->
+        <div class="form-group">
+          <label for="description">Emergency Description <span class="required-star">*</span></label>
+          <textarea
+            id="description"
+            name="description"
+            class="form-control"
+            placeholder="Describe the emergency in detail. E.g.: 'A large fire broke out on the 4th floor of an apartment building near Ameerpet X Road. At least 10 people are trapped inside…'"
+            required
+          ></textarea>
+        </div>
+
+        <!-- Image Upload -->
+        <div class="form-group">
+          <label>Photo Evidence <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+          <div class="image-upload-zone" id="image-preview-zone">
+            <div class="upload-icon">📷</div>
+            <span>Click to upload a photo</span>
+            <span style="font-size:0.75rem;">JPG, PNG, WEBP (max 5MB)</span>
+            <input type="file" id="image-file" accept="image/*">
+          </div>
+          <input type="hidden" id="image-b64">
+        </div>
+
+        <!-- Location -->
+        <div class="form-group">
+          <label>Location</label>
+          <div class="location-block">
+            <div class="location-status-row">
+              <div id="location-status" style="font-size:0.8rem;color:var(--text-muted);">Location not detected yet.</div>
+              <button type="button" class="btn-locate" id="btn-locate">📍 Detect My Location</button>
+            </div>
+            <input type="hidden" id="lat-input">
+            <input type="hidden" id="lng-input">
+
+            <!-- Landmark fallback (shown if geolocation fails) -->
+            <div id="landmark-fallback" style="display:none;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="landmark">Nearest Landmark / Address</label>
+                <input
+                  type="text"
+                  id="landmark"
+                  class="form-control"
+                  placeholder="E.g.: Near Ameerpet Metro Station, opposite SBI Bank"
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Also show landmark always as additional field -->
+        <div class="form-group" id="landmark-main-group">
+          <label for="landmark-main">Landmark / Area Name <span style="color:var(--text-muted);font-weight:400;">(helps teams navigate)</span></label>
+          <input
+            type="text"
+            id="landmark"
+            class="form-control"
+            placeholder="E.g.: Ameerpet X Road Apartment, near Pizza Hut"
+          >
+        </div>
+
+        <button type="submit" class="btn-submit-emergency" id="submit-btn">
+          🚨 Submit Emergency Report
+        </button>
+
+      </form>
+
+      <!-- RIGHT: Info Panel -->
+      <div class="info-panel">
+
+        <div class="info-panel-card">
+          <h4>🧠 How AI Analysis Works</h4>
+          <ul>
+            <li>Your description is scanned for emergency keywords</li>
+            <li>Incident type and severity are automatically classified</li>
+            <li>The best-suited rescue team is recommended</li>
+            <li>An estimated response time is calculated</li>
+            <li>Decision policy is applied instantly</li>
+          </ul>
+        </div>
+
+        <div class="info-panel-card">
+          <h4>⚡ Decision Policy</h4>
+          <ul>
+            <li><strong style="color:#f9a8d4;">Critical</strong> → Auto-dispatched immediately. Control room notified.</li>
+            <li><strong style="color:#fca5a5;">High / Medium</strong> → Sent for supervisor approval before dispatch.</li>
+            <li><strong style="color:#6ee7b7;">Low</strong> → Logged and placed in pending review queue.</li>
+          </ul>
+        </div>
+
+        <div class="info-panel-card">
+          <h4>🚒 Rescue Teams Available</h4>
+          <ul>
+            <li>Fire Response Unit – Fires, explosions</li>
+            <li>Flood Rescue (NDRF) – Floods, drowning</li>
+            <li>SDRF Structural Team – Collapses, earthquakes</li>
+            <li>Hazmat Unit – Gas leaks, chemical incidents</li>
+            <li>Emergency Response Team – Accidents, injuries</li>
+            <li>Electrical Emergency Unit – Live wires, electrocution</li>
+            <li>Civic Emergency Team – Fallen trees, debris</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Shared Footer -->
+  <div id="footer-placeholder"></div>
+
+  <script src="../../components/navbar.js"></script>
+  <script src="../../components/footer.js"></script>
+  <script type="module">
+    import { initSubmissionForm, initGeolocation, initImageUpload } from '../../js/rescue.js';
+    initGeolocation();
+    initImageUpload();
+    initSubmissionForm();
+  </script>
+
+</body>
+</html>
