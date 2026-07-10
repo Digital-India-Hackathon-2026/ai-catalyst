@@ -1546,7 +1546,7 @@ function buildEmergencyCard(e) {
         <div>${statusBadge(e.status)}</div>
         ${e.lat && e.lng ? `
           <a href="https://www.google.com/maps/dir/?api=1&destination=${e.lat},${e.lng}" target="_blank" class="team-btn btn-secondary" style="font-size:0.72rem; padding:0.25rem 0.60rem; display:inline-flex; align-items:center; gap:0.2rem; text-decoration:none; border-radius:4px; font-weight:600; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:var(--text-secondary);">
-            🚗 Navigate
+            🚗 Navigate to Scene
           </a>
         ` : ''}
       </div>
@@ -1586,7 +1586,7 @@ function buildEmergencyCard(e) {
           ${buttonsHTML}
           ${e.lat && e.lng ? `
             <a href="https://www.google.com/maps/dir/?api=1&destination=${e.lat},${e.lng}" target="_blank" class="team-btn" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8); border:none; text-decoration:none; color:#ffffff; font-size:0.72rem; padding:0.35rem 0.65rem; border-radius:4px; font-weight:600; display:inline-flex; align-items:center; gap:0.2rem;">
-              🚗 Navigate
+              🚗 Navigate to Scene
             </a>
           ` : ''}
         </div>
