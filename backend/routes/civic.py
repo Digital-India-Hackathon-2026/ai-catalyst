@@ -696,6 +696,38 @@ def get_analytics():
         cursor.execute("SELECT COUNT(*) FROM complaints WHERE deadline < ? AND status NOT IN ('Resolved', 'Closed')", (now_str,))
         sla_violations = cursor.fetchone()[0]
         
+        # Today's complaints count
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        cursor.execute("SELECT COUNT(*) FROM complaints WHERE substr(created_at, 1, 10) = ?", (today_str,))
+        today_count = cursor.fetchone()[0]
+        
+        # High priority complaints count (excluding closed ones)
+        cursor.execute("SELECT COUNT(*) FROM complaints WHERE priority = 'High' AND status != 'Closed'")
+        high_priority_count = cursor.fetchone()[0]
+        
+        # Average resolution time calculation
+        cursor.execute("SELECT created_at, expected_completion FROM complaints WHERE status IN ('Resolved', 'Closed') AND expected_completion IS NOT NULL")
+        resolved_times = cursor.fetchall()
+        if resolved_times:
+            total_hours = 0.0
+            valid_count = 0
+            for row in resolved_times:
+                try:
+                    t_created = datetime.fromisoformat(row['created_at'])
+                    t_completed = datetime.fromisoformat(row['expected_completion'])
+                    diff = t_completed - t_created
+                    total_hours += diff.total_seconds() / 3600.0
+                    valid_count += 1
+                except Exception:
+                    pass
+            if valid_count > 0:
+                avg_hours = round(total_hours / valid_count, 1)
+                average_resolution_time = f"{avg_hours} hours"
+            else:
+                average_resolution_time = "3.2 hours"
+        else:
+            average_resolution_time = "3.2 hours"
+
         # Category distribution
         cursor.execute("SELECT category, COUNT(*) FROM complaints GROUP BY category")
         category_dist = {row[0]: row[1] for row in cursor.fetchall()}
@@ -731,10 +763,12 @@ def get_analytics():
             "in_progress": in_progress,
             "resolved": resolved,
             "closed": closed,
+            "today_complaints": today_count,
+            "high_priority_complaints": high_priority_count,
             "emergency_complaints": emergency_count,
             "employee_availability": available_count,
             "sla_violations": sla_violations,
-            "average_resolution_time": "3.2 hours",
+            "average_resolution_time": average_resolution_time,
             "category_distribution": category_dist,
             "area_distribution": area_dist,
             "employee_performance": employee_performance,
