@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ role }} Login - Smart Inventory System{% endblock %}
+
+{% block guest_content %}
+<div class="login-form-container">
+    <h2>{{ role }} Login</h2>
+    <p>Please enter your information below to enter your dashboard. No password required for this demonstration.</p>
+    
+    <form action="" method="POST">
+        <!-- Field 1: Name -->
+        <div class="form-group">
+            <label for="name">{{ fields['name'] }}</label>
+            <input type="text" id="name" name="name" required placeholder="e.g. Lakshmi Devi" 
+                   value="{{ form_data.name if form_data else '' }}">
+        </div>
+        
+        <!-- Field 2: Village or Mandal Context -->
+        <div class="form-group">
+            <label for="context">{{ fields['context'] }}</label>
+            <input type="text" id="context" name="{% if role == 'ASHA Worker' %}village{% else %}mandal{% endif %}" required 
+                   placeholder="e.g. {% if role == 'ASHA Worker' %}Rampur{% else %}Shamshabad{% endif %}"
+                   value="{{ (form_data.village if role == 'ASHA Worker' else form_data.mandal) if form_data else '' }}">
+        </div>
+        
+        <button type="submit" class="btn btn-primary btn-full">Enter Dashboard</button>
+    </form>
+    
+    <div style="margin-top: 20px; text-align: center;">
+        <a href="{{ url_for('auth.index') }}" style="color: var(--primary); font-weight: 600; font-size: 0.9rem; text-decoration: none;">&larr; Back to Role Selection</a>
+    </div>
+</div>
+{% endblock %}

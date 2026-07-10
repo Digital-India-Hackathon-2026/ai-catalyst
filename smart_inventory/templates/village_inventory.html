@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+
+{% block title %}Village Inventory: {{ village_name }} - Smart Inventory System{% endblock %}
+{% block header_title %}Village Inventory Register{% endblock %}
+
+{% block content %}
+<div class="panel">
+    <div class="panel-header">
+        <div>
+            <h3 class="panel-title">🏡 Village Stock Profile: {{ village_name }}</h3>
+            <span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 500; display: block; margin-top: 4px;">
+                Assigned ASHA Worker: <strong>{{ asha_worker }}</strong>
+            </span>
+        </div>
+        <a href="{{ url_for('mandal.mandal_dashboard') }}" class="btn btn-outline btn-sm">&larr; Back to Dashboard</a>
+    </div>
+    
+    <!-- Filter and Search Bar -->
+    <form method="GET" action="{{ url_for('mandal.village_inventory', village_name=village_name) }}" class="filter-bar">
+        <div class="search-box">
+            <input type="text" name="search" placeholder="Search by medicine name..." value="{{ search }}">
+        </div>
+        
+        <select name="category" id="category-filter" class="filter-select">
+            <option value="">All Categories</option>
+            {% for cat in categories %}
+                <option value="{{ cat }}" {% if selected_category == cat %}selected{% endif %}>{{ cat }}</option>
+            {% endfor %}
+        </select>
+        
+        {% if search or selected_category %}
+            <a href="{{ url_for('mandal.village_inventory', village_name=village_name) }}" class="btn btn-outline" style="padding: 10px 16px; font-size: 0.9rem;">Reset Filters</a>
+        {% endif %}
+    </form>
+    
+    <!-- Table Wrapper -->
+    <div class="table-wrapper">
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>Medicine Name</th>
+                    <th>Category</th>
+                    <th>Qty / Stock</th>
+                    <th>Batch</th>
+                    <th>Expiry Date</th>
+                    <th>Min. Stock</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if medicines %}
+                    {% for med in medicines %}
+                        <tr>
+                            <td style="font-weight: 600;">{{ med.name }}</td>
+                            <td>{{ med.category }}</td>
+                            <td>{{ med.quantity }} {{ med.unit }}</td>
+                            <td><code>{{ med.batch_number }}</code></td>
+                            <td>{{ med.expiry_date }}</td>
+                            <td>{{ med.minimum_stock }} {{ med.unit }}</td>
+                            <td>
+                                {% if med.status == 'Available' %}
+                                    <span class="badge badge-available">Available</span>
+                                {% elif med.status == 'Low Stock' %}
+                                    <span class="badge badge-low">Low Stock</span>
+                                {% elif med.status == 'Expiring Soon' %}
+                                    <span class="badge badge-expiring">Expiring Soon</span>
+                                {% else %}
+                                    <span class="badge badge-expired">Expired</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 40px 10px;">
+                            No medicines registered in this village inventory.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
