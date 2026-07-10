@@ -26,38 +26,63 @@
         <span class="module-badge rescue">Field Operations</span>
       </div>
       <p style="color:var(--text-secondary);font-size:0.95rem;margin-top:0.5rem;">
-        Active Field Crew Dashboard. View your assigned rescue missions, accept dispatches, update live progress, and request backup from control.
+        Active Field Crew Dashboard. Identify your unit to view your assigned missions, accept dispatches, and update live progress.
       </p>
     </section>
 
-    <!-- split layout -->
-    <div class="result-layout" style="margin-top: 1.5rem;">
-      
-      <!-- LEFT: Missions List -->
-      <div class="glass-card" style="padding: 1.5rem; display:flex; flex-direction:column; gap: 1rem; min-height: 450px;">
-        <h3 style="font-family:var(--font-display); font-size: 1.1rem; color:var(--rescue-primary); margin-bottom: 0.5rem; display:flex; justify-content:space-between; align-items:center;">
-          <span>📋 Assigned Missions</span>
-          <span id="mission-count" style="font-size: 0.8rem; background:rgba(255,255,255,0.05); padding: 0.2rem 0.5rem; border-radius: 20px; color:var(--text-muted);">0 active</span>
-        </h3>
-        
-        <div id="missions-list" style="display:flex; flex-direction:column; gap:0.75rem; overflow-y:auto; max-height:550px; padding-right:0.25rem;">
-          <!-- Loaded dynamically -->
-          <div class="empty-state" style="padding: 2rem 1rem;">
-            <div class="empty-icon">⏳</div>
-            <p>Loading assigned missions...</p>
+    <!-- ── Team Selector Screen ── -->
+    <div id="team-selector-screen" class="glass-card" style="padding: 2.5rem; text-align: center; max-width: 640px; margin: 2rem auto; display: block;">
+      <div style="font-size: 3rem; margin-bottom: 1rem;">🪪</div>
+      <h2 style="font-family:var(--font-display); font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--text-primary);">Identify Your Unit</h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 2rem;">Select your rescue unit to view only the missions assigned to your team.</p>
+
+      <div id="unit-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; text-align: left; margin-bottom: 1.5rem;">
+        <!-- Generated dynamically by JS -->
+      </div>
+
+      <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 1rem;">Your selection is saved for this session. You can switch teams using the banner above the mission list.</p>
+    </div>
+
+    <!-- ── Main Dashboard (hidden until team selected) ── -->
+    <div id="dashboard-main" style="display: none; margin-top: 1.5rem;">
+
+      <!-- Active unit banner -->
+      <div id="unit-banner" style="background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); border-radius: 10px; padding: 0.65rem 1.1rem; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+        <div style="display: flex; align-items: center; gap: 0.6rem; font-size: 0.88rem; font-weight: 700; color: var(--rescue-primary);">
+          <span>🚒</span>
+          <span>Logged in as: <span id="active-unit-label">—</span></span>
+        </div>
+        <button id="btn-switch-team" class="team-btn btn-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.7rem;">⇄ Switch Team</button>
+      </div>
+
+      <!-- Split layout -->
+      <div class="result-layout">
+
+        <!-- LEFT: Missions List -->
+        <div class="glass-card" style="padding: 1.5rem; display:flex; flex-direction:column; gap: 1rem; min-height: 450px;">
+          <h3 style="font-family:var(--font-display); font-size: 1.1rem; color:var(--rescue-primary); margin-bottom: 0.5rem; display:flex; justify-content:space-between; align-items:center;">
+            <span>📋 My Missions</span>
+            <span id="mission-count" style="font-size: 0.8rem; background:rgba(255,255,255,0.05); padding: 0.2rem 0.5rem; border-radius: 20px; color:var(--text-muted);">0 active</span>
+          </h3>
+
+          <div id="missions-list" style="display:flex; flex-direction:column; gap:0.75rem; overflow-y:auto; max-height:550px; padding-right:0.25rem;">
+            <div class="empty-state" style="padding: 2rem 1rem;">
+              <div class="empty-icon">⏳</div>
+              <p>Loading your missions...</p>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- RIGHT: Selected Mission Details & Actions -->
-      <div id="details-panel" class="glass-card" style="padding: 1.5rem; min-height: 450px;">
-        <div class="empty-state" style="padding: 5rem 1rem;">
-          <div class="empty-icon">🚒</div>
-          <h3>No Mission Selected</h3>
-          <p style="color:var(--text-muted); font-size:0.85rem; margin-top:0.5rem;">Select an active mission from the left panel to begin field operations.</p>
+        <!-- RIGHT: Selected Mission Details & Actions -->
+        <div id="details-panel" class="glass-card" style="padding: 1.5rem; min-height: 450px;">
+          <div class="empty-state" style="padding: 5rem 1rem;">
+            <div class="empty-icon">🚒</div>
+            <h3>No Mission Selected</h3>
+            <p style="color:var(--text-muted); font-size:0.85rem; margin-top:0.5rem;">Select an active mission from the left panel to begin field operations.</p>
+          </div>
         </div>
-      </div>
 
+      </div>
     </div>
 
   </main>

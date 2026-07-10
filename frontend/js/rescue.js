@@ -707,9 +707,28 @@ function initFilters(root, statsEl) {
 let teamData = [];
 let selectedEid = null;
 let simulatedLocation = null; // { lat, lng }
+let currentTeamUnit = null;   // Currently active unit filter
+
+const ALL_UNITS = [
+  { label: 'Fire Unit 1',          icon: '🔥', primary: 'Fire Response Unit' },
+  { label: 'Fire Unit 2',          icon: '🔥', primary: 'Fire Response Unit' },
+  { label: 'Fire Unit 3',          icon: '🔥', primary: 'Fire Response Unit' },
+  { label: 'NDRF Unit A',          icon: '🌊', primary: 'Flood Rescue (NDRF)' },
+  { label: 'NDRF Unit B',          icon: '🌊', primary: 'Flood Rescue (NDRF)' },
+  { label: 'SDRF Unit 1',          icon: '🏗️', primary: 'SDRF Structural Response Team' },
+  { label: 'SDRF Unit 2',          icon: '🏗️', primary: 'SDRF Structural Response Team' },
+  { label: 'Hazmat Unit Alpha',    icon: '☢️', primary: 'Hazmat Response Unit' },
+  { label: 'Hazmat Unit Beta',     icon: '☢️', primary: 'Hazmat Response Unit' },
+  { label: 'ERT Unit 1',           icon: '🚑', primary: 'Emergency Response Team' },
+  { label: 'ERT Unit 2',           icon: '🚑', primary: 'Emergency Response Team' },
+  { label: 'EE Unit A',            icon: '⚡', primary: 'Electrical Emergency Unit' },
+  { label: 'EE Unit B',            icon: '⚡', primary: 'Electrical Emergency Unit' },
+  { label: 'Civic Crew 1',         icon: '🌳', primary: 'Civic Emergency Team' },
+  { label: 'Civic Crew 2',         icon: '🌳', primary: 'Civic Emergency Team' },
+];
 
 function getHaversineDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371; // Radius of the earth in km
+  const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a =
@@ -717,13 +736,73 @@ function getHaversineDistance(lat1, lon1, lat2, lon2) {
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c; // Distance in km
+  return R * c;
 }
 
 export async function initTeamDashboard() {
-  const listEl = document.getElementById('missions-list');
+  const listEl    = document.getElementById('missions-list');
   const detailsEl = document.getElementById('details-panel');
+  const selectorScreen  = document.getElementById('team-selector-screen');
+  const dashboardMain   = document.getElementById('dashboard-main');
+  const unitGrid        = document.getElementById('unit-grid');
+  const activeUnitLabel = document.getElementById('active-unit-label');
+  const switchBtn       = document.getElementById('btn-switch-team');
+
   if (!listEl) return;
+
+  // ── Build unit selector cards ──
+  if (unitGrid) {
+    unitGrid.innerHTML = ALL_UNITS.map(u => `
+      <button class="unit-select-btn" data-unit="${u.label}" style="
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 10px;
+        padding: 0.85rem 1rem;
+        cursor: pointer;
+        color: var(--text-primary);
+        font-family: var(--font-sans);
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        transition: all 0.2s ease;
+        text-align: left;
+      ">
+        <span style="font-size:1.4rem;">${u.icon}</span>
+        <div>
+          <div style="font-weight:700; font-size:0.88rem;">${u.label}</div>
+          <div style="font-size:0.72rem; color:var(--text-muted);">${u.primary}</div>
+        </div>
+      </button>
+    `).join('');
+
+    document.querySelectorAll('.unit-select-btn').forEach(btn => {
+      btn.addEventListener('mouseenter', () => btn.style.borderColor = 'rgba(245,158,11,0.4)');
+      btn.addEventListener('mouseleave', () => btn.style.borderColor = 'rgba(255,255,255,0.08)');
+      btn.addEventListener('click', () => selectUnit(btn.dataset.unit));
+    });
+  }
+
+  // ── Check sessionStorage for saved unit ──
+  const saved = sessionStorage.getItem('rescueTeamUnit');
+  if (saved) selectUnit(saved);
+
+  // ── Switch team button ──
+  switchBtn?.addEventListener('click', () => {
+    sessionStorage.removeItem('rescueTeamUnit');
+    currentTeamUnit = null;
+    selectedEid = null;
+    selectorScreen.style.display = 'block';
+    dashboardMain.style.display  = 'none';
+  });
+
+  function selectUnit(unitLabel) {
+    currentTeamUnit = unitLabel;
+    sessionStorage.setItem('rescueTeamUnit', unitLabel);
+    if (activeUnitLabel) activeUnitLabel.textContent = unitLabel;
+    selectorScreen.style.display = 'none';
+    dashboardMain.style.display  = 'block';
+    loadMissions();
+  }
 
   async function loadMissions() {
     try {
@@ -736,7 +815,11 @@ export async function initTeamDashboard() {
         return pA - pB;
       });
 
-      const activeMissions = teamData.filter(e => e.status !== 'Case Closed');
+      // Filter: only show missions assigned to this unit and not closed
+      const activeMissions = teamData.filter(e =>
+        e.status !== 'Case Closed' &&
+        e.nearest_rescue_team === currentTeamUnit
+      );
       
       document.getElementById('mission-count').textContent = `${activeMissions.length} active`;
       
