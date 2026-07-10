@@ -372,10 +372,11 @@ const STEP_DESCRIPTIONS = [
   'Your emergency report has been received by the system.',
   'Our AI engine has analysed the emergency and classified it.',
   'A rescue team has been assigned to your emergency.',
-  'The rescue team has been dispatched and is on the way.',
-  'The rescue team has arrived at the location.',
-  'Rescue operation has been completed successfully.',
-  'The case has been officially closed and logged.',
+  'The rescue team has accepted the assigned mission.',
+  'The rescue team has started the journey to your location.',
+  'The rescue team has reached the incident location.',
+  'Rescue operation is currently in progress.',
+  'Rescue operation has been completed successfully.'
 ];
 
 function renderTrackingPage(data, root) {
@@ -700,4 +701,287 @@ function initFilters(root, statsEl) {
       renderEmergencies(root, filtered);
     });
   });
+}
+
+// ─── RESCUE TEAM DASHBOARD ──────────────────────────────────
+let teamData = [];
+let selectedEid = null;
+
+export async function initTeamDashboard() {
+  const listEl = document.getElementById('missions-list');
+  const detailsEl = document.getElementById('details-panel');
+  if (!listEl) return;
+
+  async function loadMissions() {
+    try {
+      const emergencies = await apiGet('/api/rescue/emergencies');
+      
+      const priorityOrder = { 'critical': 0, 'high': 1, 'medium': 2, 'low': 3 };
+      teamData = emergencies.sort((a, b) => {
+        const pA = priorityOrder[a.severity.toLowerCase()] ?? 99;
+        const pB = priorityOrder[b.severity.toLowerCase()] ?? 99;
+        return pA - pB;
+      });
+
+      const activeMissions = teamData.filter(e => e.status !== 'Case Closed');
+      
+      document.getElementById('mission-count').textContent = `${activeMissions.length} active`;
+      
+      if (!activeMissions.length) {
+        listEl.innerHTML = `
+          <div class="empty-state" style="padding: 2rem 1rem;">
+            <div class="empty-icon">✅</div>
+            <p>No active missions assigned.</p>
+          </div>`;
+        detailsEl.innerHTML = `
+          <div class="empty-state" style="padding: 5rem 1rem;">
+            <div class="empty-icon">🚒</div>
+            <h3>No Mission Selected</h3>
+            <p style="color:var(--text-muted); font-size:0.85rem; margin-top:0.5rem;">Select an active mission from the left panel to begin field operations.</p>
+          </div>`;
+        return;
+      }
+
+      listEl.innerHTML = activeMissions.map(m => {
+        const activeClass = selectedEid === m.emergency_id ? 'active' : '';
+        const sev = m.severity.toLowerCase();
+        
+        return `
+          <div class="mission-item ${activeClass} border-severity-${sev}" data-eid="${m.emergency_id}" style="padding: 1rem; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-left: 4px solid var(--border-color, #fff); border-radius: 8px; cursor: pointer; transition: all 0.2s ease; margin-bottom: 0.5rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.35rem;">
+              <span style="font-weight: 700; font-family: monospace; color: var(--rescue-primary);">${m.emergency_id}</span>
+              ${severityBadge(m.severity)}
+            </div>
+            <div style="font-size: 0.9rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">${m.incident_type}</div>
+            <div style="font-size: 0.78rem; color: var(--text-muted); display: flex; justify-content: space-between; align-items:center;">
+              <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;">📍 ${m.landmark || 'No landmark'}</span>
+              <span>${statusBadge(m.status)}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      document.querySelectorAll('.mission-item').forEach(item => {
+        item.addEventListener('click', () => {
+          selectedEid = item.dataset.eid;
+          document.querySelectorAll('.mission-item').forEach(el => el.classList.remove('active'));
+          item.classList.add('active');
+          renderDetails();
+        });
+      });
+
+      if (selectedEid) {
+        renderDetails();
+      }
+
+    } catch (err) {
+      listEl.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">❌</div>
+          <p>Error loading missions: ${err.message}</p>
+        </div>`;
+    }
+  }
+
+  function renderDetails() {
+    const m = teamData.find(e => e.emergency_id === selectedEid);
+    if (!m) {
+      detailsEl.innerHTML = `
+        <div class="empty-state" style="padding: 5rem 1rem;">
+          <div class="empty-icon">🚒</div>
+          <h3>Select a Mission</h3>
+          <p style="color:var(--text-muted); font-size:0.85rem;">Select an emergency mission on the left to see details and perform actions.</p>
+        </div>`;
+      return;
+    }
+
+    const sev = m.severity.toLowerCase();
+    
+    const dispatchType = m.severity === 'Critical' ? 'Automatic Dispatch' : 'Manual Dispatch / Supervisor Approved';
+    
+    // Mission Action logic based on status
+    const btnAcceptActive = (m.status === 'Team Assigned' || m.status === 'Auto Dispatched' || m.status === 'Complaint Submitted' || m.status === 'Complaint Received') ? 'btn-active' : 'btn-disabled';
+    const btnJourneyActive = (m.status === 'Mission Accepted') ? 'btn-active' : 'btn-disabled';
+    const btnArrivedActive = (m.status === 'Start Journey' || m.status === 'Team Dispatched') ? 'btn-active' : 'btn-disabled';
+    const btnProgressActive = (m.status === 'Reached Location' || m.status === 'Team Arrived') ? 'btn-active' : 'btn-disabled';
+    const btnCompleteActive = (m.status === 'Rescue in Progress') ? 'btn-active' : 'btn-disabled';
+
+    const steps = [
+      'Complaint Received',
+      'AI Analysis Completed',
+      'Team Assigned',
+      'Mission Accepted',
+      'Start Journey',
+      'Reached Location',
+      'Rescue in Progress',
+      'Mission Completed'
+    ];
+    
+    const statusMapping = {
+      'Complaint Received': 0,
+      'Complaint Submitted': 0,
+      'AI Analysis Completed': 1,
+      'AI Analysis Complete': 1,
+      'Pending Supervisor Approval': 1,
+      'Pending Review': 1,
+      'Auto Dispatched': 2,
+      'Team Assigned': 2,
+      'Mission Accepted': 3,
+      'Start Journey': 4,
+      'Team Dispatched': 4,
+      'Reached Location': 5,
+      'Team Arrived': 5,
+      'Rescue in Progress': 6,
+      'Mission Completed': 7,
+      'Rescue Completed': 7,
+      'Case Closed': 7
+    };
+    
+    const currentIndex = statusMapping[m.status] ?? 0;
+    
+    const timelineHTML = steps.map((step, idx) => {
+      let cls = '';
+      if (idx < currentIndex) cls = 'completed';
+      else if (idx === currentIndex) cls = 'active';
+      return `
+        <div class="team-step-item ${cls}">
+          <div class="team-step-dot"></div>
+          <div class="team-step-title">${step}</div>
+        </div>
+      `;
+    }).join('');
+
+    detailsEl.innerHTML = `
+      <div style="display:flex; flex-direction:column; gap:1.25rem;">
+        
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:0.5rem; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:0.75rem;">
+          <div>
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+              <h2 style="font-family:var(--font-display); font-size:1.4rem; font-weight:700; color:var(--text-primary); margin:0;">${m.emergency_id}</h2>
+              ${severityBadge(m.severity)}
+            </div>
+            <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.2rem;">Submitted: ${formatTime(m.submitted_at)}</p>
+          </div>
+          <div>
+            ${statusBadge(m.status)}
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.85rem; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:1rem;">
+          <div>
+            <div style="color:var(--text-muted); font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.25rem;">Incident Type</div>
+            <div style="font-weight:700; font-size: 1rem; color:var(--text-primary);">${m.incident_type}</div>
+          </div>
+          <div>
+            <div style="color:var(--text-muted); font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.25rem;">ETA / Response Time</div>
+            <div style="font-weight:700; font-size: 1rem; color:var(--text-primary);">${m.response_time_minutes} minutes</div>
+          </div>
+          <div>
+            <div style="color:var(--text-muted); font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.25rem;">Required Departments</div>
+            <div style="color:var(--text-secondary);">${m.recommended_departments || 'Rescue Emergency Services'}</div>
+          </div>
+          <div>
+            <div style="color:var(--text-muted); font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.25rem;">Location Landmark</div>
+            <div style="color:var(--text-secondary);">${m.landmark || (m.lat ? `${m.lat}, ${m.lng}` : 'Not Specified')}</div>
+          </div>
+        </div>
+
+        <div>
+          <div style="color:var(--text-muted); font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.35rem;">Description</div>
+          <div style="font-size:0.9rem; color:var(--text-secondary); line-height:1.6; background:rgba(255,255,255,0.02); padding:0.75rem; border: 1px solid rgba(255,255,255,0.05); border-radius:6px;">
+            ${m.description}
+          </div>
+        </div>
+
+        ${m.image_path ? `
+        <div>
+          <div style="color:var(--text-muted); font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.35rem;">Incident Image</div>
+          <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:0.5rem; border:1px solid rgba(255,255,255,0.05);">
+            <img src="${m.image_path}" alt="Emergency Scene Photo" style="max-height: 200px; max-width: 100%; border-radius:4px; object-fit: contain;">
+          </div>
+        </div>` : ''}
+
+        <div style="background: rgba(245, 158, 11, 0.04); border: 1px solid rgba(245, 158, 11, 0.15); border-radius: 8px; padding: 0.85rem; font-size: 0.82rem;">
+          <h4 style="color: var(--rescue-primary); margin:0 0 0.5rem 0; font-size:0.88rem; font-weight:700; display:flex; justify-content:space-between;">
+            <span>🤖 AI Dispatch Summary</span>
+            <span style="color:var(--rescue-primary); font-weight:700;">Confidence: ${m.confidence_score}%</span>
+          </h4>
+          <div style="display:flex; flex-direction:column; gap:0.35rem; color: var(--text-secondary);">
+            <span><strong>Priority:</strong> ${m.severity}</span>
+            <span><strong>Dispatch Type:</strong> ${dispatchType}</span>
+            <span><strong>Assignment Reason:</strong> Keyword check matched incident type context "${m.incident_type}".</span>
+          </div>
+        </div>
+
+        <div>
+          <div style="color:var(--text-muted); font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.75rem;">Mission Progress Timeline</div>
+          <div class="team-timeline-stepper" style="display:flex; gap:0.5rem; overflow-x:auto; padding-bottom:0.5rem;">
+            ${timelineHTML}
+          </div>
+        </div>
+
+        <div>
+          <div style="color:var(--text-muted); font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.5rem;">Perform Actions</div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.75rem; flex-wrap:wrap;">
+            
+            <button class="team-btn ${btnAcceptActive}" id="act-accept" data-status="Mission Accepted">
+              🤝 Accept Mission
+            </button>
+            <button class="team-btn ${btnJourneyActive}" id="act-journey" data-status="Start Journey">
+              ⚡ Start Journey
+            </button>
+            <button class="team-btn ${btnArrivedActive}" id="act-arrived" data-status="Reached Location">
+              📍 Reached Location
+            </button>
+            <button class="team-btn ${btnProgressActive}" id="act-progress" data-status="Rescue in Progress">
+              🔨 Rescue in Progress
+            </button>
+            <button class="team-btn ${btnCompleteActive}" id="act-complete" data-status="Mission Completed" style="grid-column: span 2;">
+              🏆 Mission Completed
+            </button>
+            
+            <button class="team-btn btn-secondary" id="act-backup" style="font-size:0.8rem;">
+              ⚠️ Request Backup
+            </button>
+            <button class="team-btn btn-secondary" id="act-contact" style="font-size:0.8rem;">
+              📞 Contact Control
+            </button>
+
+          </div>
+        </div>
+
+      </div>
+    `;
+
+    document.querySelectorAll('.team-btn[data-status]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (btn.classList.contains('btn-disabled')) return;
+        const targetStatus = btn.dataset.status;
+        
+        btn.disabled = true;
+        try {
+          const res = await apiPatch(`/api/rescue/emergencies/${selectedEid}`, {
+            status: targetStatus,
+            note: `Field Team updated status to: ${targetStatus}`,
+            actor: 'Rescue Field Crew'
+          });
+          showToast(`Mission status updated: ${targetStatus}`, 'success');
+          await loadMissions();
+        } catch (err) {
+          showToast(`Update failed: ${err.message}`, 'error');
+          btn.disabled = false;
+        }
+      });
+    });
+
+    document.getElementById('act-backup')?.addEventListener('click', () => {
+      showToast('Backup request dispatched to Control Room!', 'warning');
+    });
+
+    document.getElementById('act-contact')?.addEventListener('click', () => {
+      alert('📞 Control Room Emergency Hotline: +91 40-23456789 (GovConnect HQ)');
+    });
+  }
+
+  await loadMissions();
 }

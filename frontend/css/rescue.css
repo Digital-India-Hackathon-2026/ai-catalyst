@@ -990,3 +990,118 @@ textarea.form-control {
 
 .empty-state .empty-icon { font-size: 2.8rem; margin-bottom: 0.75rem; }
 .empty-state p { font-size: 0.9rem; max-width: 350px; margin: 0 auto; }
+
+/* ─── Rescue Team Dashboard Specific Styles ─── */
+.mission-item.active {
+  background: rgba(245, 158, 11, 0.08) !important;
+  border-color: rgba(245, 158, 11, 0.3) !important;
+}
+
+.mission-item:hover {
+  transform: translateY(-2px);
+  background: rgba(255,255,255,0.05);
+}
+
+.border-severity-critical { border-left-color: var(--color-critical) !important; }
+.border-severity-high { border-left-color: var(--color-danger) !important; }
+.border-severity-medium { border-left-color: var(--color-warning) !important; }
+.border-severity-low { border-left-color: var(--color-success) !important; }
+
+/* Timeline Stepper for Team Dashboard */
+.team-timeline-stepper {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 0.75rem 0.25rem;
+  width: 100%;
+}
+
+.team-step-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1;
+  text-align: center;
+  min-width: 80px;
+}
+
+.team-step-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  transition: all 0.3s ease;
+}
+
+.team-step-item.completed .team-step-dot {
+  background: var(--color-success);
+  border-color: var(--color-success);
+  box-shadow: 0 0 8px var(--color-success-glow);
+}
+
+.team-step-item.active .team-step-dot {
+  background: var(--rescue-primary);
+  border-color: var(--rescue-primary);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+  transform: scale(1.2);
+}
+
+.team-step-title {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  max-width: 90px;
+  white-space: normal;
+  line-height: 1.2;
+}
+
+.team-step-item.completed .team-step-title { color: var(--color-success); }
+.team-step-item.active .team-step-title { color: var(--rescue-primary); }
+
+/* Mission Action buttons */
+.team-btn {
+  padding: 0.7rem 1.25rem;
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 700;
+  border: 1px solid rgba(255,255,255,0.08);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.team-btn.btn-active {
+  background: linear-gradient(135deg, #f59e0b 0%, #fb923c 100%);
+  color: #fff;
+  border: none;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.25);
+}
+
+.team-btn.btn-active:hover {
+  transform: translateY(-1.5px);
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
+}
+
+.team-btn.btn-disabled {
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(255, 255, 255, 0.2);
+  cursor: not-allowed;
+  border-color: rgba(255,255,255,0.03);
+}
+
+.team-btn.btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.team-btn.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
+}
