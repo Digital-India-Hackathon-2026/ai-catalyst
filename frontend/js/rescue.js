@@ -133,147 +133,209 @@ export function ensureLeafletLoaded() {
   return leafletLoadedPromise;
 }
 
+// ── Persistent map instance cache (by container ID) ──────────
+const _mapInstances = {};
+
 export async function renderUnifiedMap(containerId, center, zoom, markers = []) {
   const container = document.getElementById(containerId);
   if (!container) return null;
-  container.innerHTML = ''; // Clear loading/offline text
-  
-  // 1. Fetch maps key config
+
+  // 1. Fetch maps key config (cached via module-level promise)
   let key = '';
   try {
     const config = await apiGet('/api/rescue/config/maps-key');
     key = config.key || '';
   } catch (err) {
-    console.warn("Could not fetch maps API key from backend:", err);
+    console.warn("Could not fetch maps API key:", err);
   }
-  
+
   const isDummy = !key || key.toLowerCase().includes('dummy') || key === 'undefined';
-  
-  if (!isDummy) {
-    // Attempt Google Maps
-    try {
-      await ensureGoogleMapsLoaded();
-      const map = new google.maps.Map(container, {
-        center: center,
-        zoom: zoom,
-        styles: MAP_DARK_STYLES,
-        disableDefaultUI: true,
-        zoomControl: true
-      });
-      
-      const bounds = new google.maps.LatLngBounds();
-      let hasMarkers = false;
-      
-      markers.forEach(m => {
-        const markerColor = m.color || '#3b82f6';
-        let markerOptions = {
-          position: m.pos,
-          map: map,
-          title: m.title
-        };
-        
-        if (m.icon) {
-          if (m.icon.url) {
-            markerOptions.icon = m.icon;
-          } else if (typeof m.icon === 'string') {
-            // Text/Emoji Marker representation in Google Maps
-            // Using small circle with label
-            markerOptions.label = {
-              text: m.icon,
-              fontSize: '20px'
-            };
-            markerOptions.icon = {
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 0
-            };
-          }
+
+  // ── EXISTING MAP: just update markers ─────────────────────
+  const existing = _mapInstances[containerId];
+  if (existing) {
+    // Remove old markers
+    existing.markerRefs.forEach(ref => {
+      if (existing.type === 'leaflet') ref.remove();
+      else if (existing.type === 'google') ref.setMap(null);
+    });
+    // Remove old polylines
+    existing.polylineRefs.forEach(ref => {
+      if (existing.type === 'leaflet') ref.remove();
+      else if (existing.type === 'google') ref.setMap(null);
+    });
+    existing.markerRefs = [];
+    existing.polylineRefs = [];
+
+    // Re-add markers on existing map
+    const rawMap = existing.map;
+    const group = [];
+
+    markers.forEach(m => {
+      let newMarker;
+      if (existing.type === 'leaflet') {
+        if (m.icon && typeof m.icon === 'string') {
+          const icon = L.divIcon({
+            html: `<div style="font-size:28px; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.8)); line-height:1;">${m.icon}</div>`,
+            className: '',
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
+          });
+          newMarker = L.marker([m.pos.lat, m.pos.lng], { icon }).addTo(rawMap);
         } else {
-          markerOptions.icon = {
+          newMarker = L.circleMarker([m.pos.lat, m.pos.lng], {
+            radius: 9,
+            fillColor: m.color || '#3b82f6',
+            fillOpacity: 0.92,
+            color: '#ffffff',
+            weight: 2.5
+          }).addTo(rawMap);
+        }
+        if (m.info) newMarker.bindPopup(m.info);
+        group.push([m.pos.lat, m.pos.lng]);
+      } else if (existing.type === 'google') {
+        const markerOpts = { position: m.pos, map: rawMap, title: m.title };
+        if (m.icon && typeof m.icon === 'string') {
+          markerOpts.label = { text: m.icon, fontSize: '22px' };
+          markerOpts.icon = { path: google.maps.SymbolPath.CIRCLE, scale: 0 };
+        } else {
+          markerOpts.icon = {
             path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-            fillColor: markerColor,
-            fillOpacity: 0.9,
-            strokeWeight: 2,
-            strokeColor: "#ffffff",
-            scale: 6
+            fillColor: m.color || '#3b82f6', fillOpacity: 0.9,
+            strokeWeight: 2, strokeColor: '#ffffff', scale: 6
           };
         }
-        
-        const gMarker = new google.maps.Marker(markerOptions);
-        
+        newMarker = new google.maps.Marker(markerOpts);
         if (m.info) {
-          const infoWindow = new google.maps.InfoWindow({
-            content: m.info
-          });
-          gMarker.addListener('click', () => {
-            infoWindow.open(map, gMarker);
-          });
+          const iw = new google.maps.InfoWindow({ content: m.info });
+          newMarker.addListener('click', () => iw.open(rawMap, newMarker));
         }
-        
-        bounds.extend(m.pos);
-        hasMarkers = true;
+      }
+      if (newMarker) existing.markerRefs.push(newMarker);
+    });
+
+    // Refit bounds for Leaflet
+    if (existing.type === 'leaflet' && group.length > 1) {
+      rawMap.fitBounds(group, { padding: [40, 40] });
+    }
+
+    return { type: existing.type, map: rawMap, rawMap, addPolyline: existing.addPolyline };
+  }
+
+  // ── NEW MAP ────────────────────────────────────────────────
+  container.innerHTML = '';
+
+  const instance = {
+    type: null,
+    map: null,
+    markerRefs: [],
+    polylineRefs: [],
+    addPolyline: null
+  };
+
+  if (!isDummy) {
+    try {
+      await ensureGoogleMapsLoaded();
+      const gmap = new google.maps.Map(container, {
+        center, zoom, styles: MAP_DARK_STYLES,
+        disableDefaultUI: true, zoomControl: true
       });
-      
-      if (hasMarkers && markers.length > 1) {
-        map.fitBounds(bounds);
-        const listener = google.maps.event.addListener(map, "idle", () => {
-          if (map.getZoom() > 15) map.setZoom(15);
-          google.maps.event.removeListener(listener);
+      instance.type = 'google';
+      instance.map = gmap;
+      instance.addPolyline = (pts, opts) => {
+        const pl = new google.maps.Polyline({ path: pts, map: gmap, ...opts });
+        instance.polylineRefs.push(pl);
+        return pl;
+      };
+
+      const bounds = new google.maps.LatLngBounds();
+      markers.forEach(m => {
+        const markerOpts = { position: m.pos, map: gmap, title: m.title };
+        if (m.icon && typeof m.icon === 'string') {
+          markerOpts.label = { text: m.icon, fontSize: '22px' };
+          markerOpts.icon = { path: google.maps.SymbolPath.CIRCLE, scale: 0 };
+        } else {
+          markerOpts.icon = {
+            path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+            fillColor: m.color || '#3b82f6', fillOpacity: 0.9,
+            strokeWeight: 2, strokeColor: '#ffffff', scale: 6
+          };
+        }
+        const gm = new google.maps.Marker(markerOpts);
+        if (m.info) {
+          const iw = new google.maps.InfoWindow({ content: m.info });
+          gm.addListener('click', () => iw.open(gmap, gm));
+        }
+        instance.markerRefs.push(gm);
+        bounds.extend(m.pos);
+      });
+
+      if (markers.length > 1) {
+        gmap.fitBounds(bounds);
+        const l = google.maps.event.addListener(gmap, 'idle', () => {
+          if (gmap.getZoom() > 15) gmap.setZoom(15);
+          google.maps.event.removeListener(l);
         });
       }
-      
-      return { type: 'google', map, rawMap: map };
+
+      _mapInstances[containerId] = instance;
+      return { type: 'google', map: gmap, rawMap: gmap, addPolyline: instance.addPolyline };
     } catch (gErr) {
-      console.warn("Google Maps failed to load, falling back to Leaflet:", gErr);
+      console.warn("Google Maps failed, falling back to Leaflet:", gErr);
     }
   }
-  
-  // 2. Leaflet Fallback
+
+  // Leaflet fallback
   await ensureLeafletLoaded();
-  const map = L.map(container, {
-    zoomControl: true,
-    attributionControl: false
-  }).setView([center.lat, center.lng], zoom);
-  
+
+  const lmap = L.map(container, { zoomControl: true, attributionControl: false })
+    .setView([center.lat, center.lng], zoom);
+
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     maxZoom: 20
-  }).addTo(map);
-  
+  }).addTo(lmap);
+
+  instance.type = 'leaflet';
+  instance.map = lmap;
+  instance.addPolyline = (pts, opts) => {
+    const pl = L.polyline(pts, opts).addTo(lmap);
+    instance.polylineRefs.push(pl);
+    return pl;
+  };
+
   const group = [];
-  
   markers.forEach(m => {
-    let leafletMarker;
+    let lm;
     if (m.icon && typeof m.icon === 'string') {
-      // Use Leaflet DivIcon for emoji icon symbols (vehicle tracking)
       const icon = L.divIcon({
-        html: `<div style="font-size: 24px; text-shadow: 0 0 4px rgba(0,0,0,0.5);">${m.icon}</div>`,
-        className: 'custom-div-icon',
-        iconSize: [24, 24],
-        iconAnchor: [12, 12]
+        html: `<div style="font-size:28px; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.8)); line-height:1;">${m.icon}</div>`,
+        className: '',
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
       });
-      leafletMarker = L.marker([m.pos.lat, m.pos.lng], { icon }).addTo(map);
+      lm = L.marker([m.pos.lat, m.pos.lng], { icon }).addTo(lmap);
     } else {
-      const markerColor = m.color || '#3b82f6';
-      leafletMarker = L.circleMarker([m.pos.lat, m.pos.lng], {
-        radius: 8,
-        fillColor: markerColor,
-        fillOpacity: 0.9,
+      lm = L.circleMarker([m.pos.lat, m.pos.lng], {
+        radius: 9,
+        fillColor: m.color || '#3b82f6',
+        fillOpacity: 0.92,
         color: '#ffffff',
-        weight: 2
-      }).addTo(map);
+        weight: 2.5
+      }).addTo(lmap);
     }
-    
-    if (m.info) {
-      leafletMarker.bindPopup(m.info);
-    }
+    if (m.info) lm.bindPopup(m.info);
+    instance.markerRefs.push(lm);
     group.push([m.pos.lat, m.pos.lng]);
   });
-  
+
   if (group.length > 1) {
-    map.fitBounds(group, { padding: [40, 40] });
+    lmap.fitBounds(group, { padding: [40, 40] });
   }
-  
-  return { type: 'leaflet', map, rawMap: map };
+
+  _mapInstances[containerId] = instance;
+  return { type: 'leaflet', map: lmap, rawMap: lmap, addPolyline: instance.addPolyline };
 }
+
 
 
 export const MAP_DARK_STYLES = [
@@ -977,38 +1039,26 @@ function renderTrackingPage(data, root) {
         statusTextEl.style.fontWeight = statusIndex === 4 ? '700' : '400';
       }
 
-      // Draw dashed route line base→incident
-      if (mapResult && statusIndex >= 2) {
-        const rawMap = mapResult.map;
-        if (mapResult.type === 'leaflet') {
-          L.polyline([
-            [teamBase.lat, teamBase.lng],
-            [incidentPos.lat, incidentPos.lng]
-          ], { color: '#fb923c', weight: 3, dashArray: '6, 8', opacity: 0.75 }).addTo(rawMap);
-
-          // Progress line (solid) showing distance covered
-          if (statusIndex === 4 && progressFraction > 0) {
-            L.polyline([
-              [teamBase.lat, teamBase.lng],
-              [teamPos.lat, teamPos.lng]
-            ], { color: '#22c55e', weight: 4, opacity: 0.9 }).addTo(rawMap);
-          }
-        } else if (mapResult.type === 'google') {
-          new google.maps.Polyline({
-            path: [teamBase, incidentPos],
-            strokeColor: '#fb923c', strokeOpacity: 0.6, strokeWeight: 3,
-            icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '12px' }],
-            map: rawMap
-          });
-          if (statusIndex === 4 && progressFraction > 0) {
-            new google.maps.Polyline({
-              path: [teamBase, teamPos],
-              strokeColor: '#22c55e', strokeOpacity: 0.9, strokeWeight: 4,
-              map: rawMap
-            });
-          }
+      // Draw dashed route line base→incident + solid progress line
+      if (mapResult && mapResult.addPolyline && statusIndex >= 2) {
+        // Full route (dashed orange)
+        mapResult.addPolyline(
+          [[teamBase.lat, teamBase.lng], [incidentPos.lat, incidentPos.lng]],
+          mapResult.type === 'leaflet'
+            ? { color: '#fb923c', weight: 3, dashArray: '6, 8', opacity: 0.75 }
+            : { strokeColor: '#fb923c', strokeOpacity: 0.6, strokeWeight: 3, geodesic: true }
+        );
+        // Progress line (solid green) — distance already covered
+        if (statusIndex === 4 && progressFraction > 0) {
+          mapResult.addPolyline(
+            [[teamBase.lat, teamBase.lng], [teamPos.lat, teamPos.lng]],
+            mapResult.type === 'leaflet'
+              ? { color: '#22c55e', weight: 4, opacity: 0.9 }
+              : { strokeColor: '#22c55e', strokeOpacity: 0.9, strokeWeight: 4, geodesic: true }
+          );
         }
       }
+
     }, 100);
   }
 }
