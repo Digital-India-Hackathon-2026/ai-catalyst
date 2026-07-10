@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+
+{% block title %}Request Medicine Replenishment - Smart Inventory System{% endblock %}
+{% block header_title %}Replenishment Request Form{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width: 600px; margin: 0 auto;">
+    <div class="panel-header">
+        <h3 class="panel-title">📝 New Medicine Stock Request</h3>
+        <a href="{{ url_for('asha.request_history') }}" class="btn btn-outline btn-sm">&larr; Request History</a>
+    </div>
+    
+    <form method="POST" action="{{ url_for('asha.request_new') }}" class="form-container">
+        <!-- Medicine Selection -->
+        <div class="form-group">
+            <label for="medicine_id" class="form-label">Select Medicine *</label>
+            <select name="medicine_id" id="medicine_id" class="filter-select" style="width: 100%;" required>
+                <option value="">-- Choose Medicine --</option>
+                {% for med in medicines %}
+                    <option value="{{ med.id }}" data-qty="{{ med.quantity }}" data-unit="{{ med.unit }}"
+                        {% if pre_selected_id|string == med.id|string or (form_data and form_data.get('medicine_id')|string == med.id|string) %}selected{% endif %}>
+                        {{ med.medicine_name }} (Current: {{ med.quantity }} {{ med.unit }})
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Current Stock Display -->
+        <div class="form-group" id="stock-display-group" style="display: none; background-color: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
+            <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;">Current Stock in Village:</span>
+            <strong id="stock-display-value" style="font-size: 1rem; color: var(--text-main); margin-left: 5px;">0</strong>
+        </div>
+
+        <!-- Requested Quantity -->
+        <div class="form-group">
+            <label for="requested_quantity" class="form-label">Requested Quantity *</label>
+            <input type="number" name="requested_quantity" id="requested_quantity" class="filter-select" style="width: 100%;" 
+                placeholder="Enter replenishing quantity" min="1" value="{% if form_data %}{{ form_data.get('requested_quantity') }}{% endif %}" required>
+        </div>
+
+        <!-- Priority Select -->
+        <div class="form-group">
+            <label for="priority" class="form-label">Urgency Priority *</label>
+            <select name="priority" id="priority" class="filter-select" style="width: 100%;" required>
+                <option value="Low" {% if form_data and form_data.get('priority') == 'Low' %}selected{% endif %}>Low</option>
+                <option value="Medium" {% if not form_data or form_data.get('priority') == 'Medium' %}selected{% endif %}>Medium</option>
+                <option value="High" {% if form_data and form_data.get('priority') == 'High' %}selected{% endif %}>High</option>
+                <option value="Emergency" {% if form_data and form_data.get('priority') == 'Emergency' %}selected{% endif %}>Emergency (Immediate Dispatch Needed)</option>
+            </select>
+        </div>
+
+        <!-- Reason -->
+        <div class="form-group">
+            <label for="reason" class="form-label">Reason for Request *</label>
+            <textarea name="reason" id="reason" class="filter-select" style="width: 100%; height: 100px; resize: vertical;" 
+                placeholder="Explain why this medicine is needed (e.g. low stock, high seasonal flu cases, program distribution)" required>{% if form_data %}{{ form_data.get('reason') }}{% endif %}</textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 15px; padding: 12px;">Submit Replenishment Request</button>
+    </form>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const medSelect = document.getElementById("medicine_id");
+        const stockGroup = document.getElementById("stock-display-group");
+        const stockVal = document.getElementById("stock-display-value");
+
+        const updateStockDisplay = () => {
+            const selectedOpt = medSelect.options[medSelect.selectedIndex];
+            if (selectedOpt && selectedOpt.value !== "") {
+                const qty = selectedOpt.getAttribute("data-qty");
+                const unit = selectedOpt.getAttribute("data-unit");
+                stockVal.textContent = `${qty} ${unit}`;
+                stockGroup.style.display = "block";
+            } else {
+                stockGroup.style.display = "none";
+            }
+        };
+
+        medSelect.addEventListener("change", updateStockDisplay);
+        // Pre-fill on load if selection exists
+        updateStockDisplay();
+    });
+</script>
+{% endblock %}

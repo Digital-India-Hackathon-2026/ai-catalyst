@@ -1,0 +1,332 @@
+{% extends 'base.html' %}
+
+{% block title %}Mandal Hospital Dashboard - Smart Inventory System{% endblock %}
+{% block header_title %}Mandal Hospital Overview Dashboard{% endblock %}
+
+{% block content %}
+<!-- Dashboard Cards -->
+<div class="metrics-grid">
+    <!-- Card 1: Total Villages -->
+    <div class="metric-card">
+        <div class="metric-info">
+            <h4>Total Villages</h4>
+            <div class="metric-value">{{ total_villages }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--primary);">🏡</div>
+    </div>
+    
+    <!-- Card 2: Total Medicines -->
+    <div class="metric-card info">
+        <div class="metric-info">
+            <h4>Global Stock Qty</h4>
+            <div class="metric-value">{{ total_medicines }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--secondary-light);">📦</div>
+    </div>
+    
+    <!-- Card 3: Low Stock Cases -->
+    <div class="metric-card warning">
+        <div class="metric-info">
+            <h4>Low Stock Cases</h4>
+            <div class="metric-value">{{ low_stock_cases }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--color-low);">⚠️</div>
+    </div>
+    
+    <!-- Card 4: Expired Medicines -->
+    <div class="metric-card danger">
+        <div class="metric-info">
+            <h4>Expired Medicines</h4>
+            <div class="metric-value">{{ expired_medicines }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--color-expired);">❌</div>
+    </div>
+
+    <!-- Card 5: Total Requests -->
+    <div class="metric-card info">
+        <div class="metric-info">
+            <h4>Total Requests</h4>
+            <div class="metric-value">{{ total_requests }}</div>
+        </div>
+        <div class="metric-icon" style="color: #6366f1;">📝</div>
+    </div>
+
+    <!-- Card 6: Pending Requests -->
+    <div class="metric-card warning">
+        <div class="metric-info">
+            <h4>Pending Requests</h4>
+            <div class="metric-value">{{ pending_requests }}</div>
+        </div>
+        <div class="metric-icon" style="color: #ea580c;">⏳</div>
+    </div>
+
+    <!-- Card 7: Approved Requests -->
+    <div class="metric-card info">
+        <div class="metric-info">
+            <h4>Approved Requests</h4>
+            <div class="metric-value">{{ approved_requests }}</div>
+        </div>
+        <div class="metric-icon" style="color: #2563eb;">✔️</div>
+    </div>
+
+    <!-- Card 8: Delivered Requests -->
+    <div class="metric-card success">
+        <div class="metric-info">
+            <h4>Delivered Requests</h4>
+            <div class="metric-value">{{ delivered_requests }}</div>
+        </div>
+        <div class="metric-icon" style="color: #10b981;">📦</div>
+    </div>
+</div>
+
+<!-- Requests Queue Management -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 30px; margin-bottom: 30px;">
+    <!-- Recent Requests -->
+    <div class="panel">
+        <div class="panel-header">
+            <h3 class="panel-title">📥 Recent Replenishment Requests</h3>
+            <a href="{{ url_for('mandal.reports') }}" style="font-size: 0.8rem; font-weight: 500; text-decoration: none; color: var(--primary);">View All</a>
+        </div>
+        <div class="table-wrapper">
+            <table class="custom-table" style="font-size: 0.85rem;">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Village</th>
+                        <th>Medicine</th>
+                        <th>Qty</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if recent_requests %}
+                        {% for req in recent_requests %}
+                            <tr>
+                                <td><a href="{{ url_for('mandal.request_view', req_id=req.id) }}" style="font-weight: 600; text-decoration: none; color: var(--primary);">#REQ-{{ req.id }}</a></td>
+                                <td>{{ req.village }}</td>
+                                <td>{{ req.medicine_name }}</td>
+                                <td>{{ req.requested_quantity }} {{ req.unit }}</td>
+                                <td>
+                                    {% if req.status == 'Pending' %}
+                                        <span class="status-badge" style="background-color: #fef3c7; color: #d97706; padding: 2px 6px; font-size: 0.75rem;">Pending</span>
+                                    {% elif req.status == 'Approved' %}
+                                        <span class="status-badge" style="background-color: #dbeafe; color: #1d4ed8; padding: 2px 6px; font-size: 0.75rem;">Approved</span>
+                                    {% elif req.status == 'Dispatched' %}
+                                        <span class="status-badge" style="background-color: #fae8ff; color: #a21caf; padding: 2px 6px; font-size: 0.75rem;">Dispatched</span>
+                                    {% elif req.status == 'Delivered' %}
+                                        <span class="status-badge" style="background-color: #d1fae5; color: #065f46; padding: 2px 6px; font-size: 0.75rem;">Delivered</span>
+                                    {% elif req.status == 'Rejected' %}
+                                        <span class="status-badge" style="background-color: #fee2e2; color: #991b1b; padding: 2px 6px; font-size: 0.75rem;">Rejected</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">No requests submitted.</td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Emergency Requests -->
+    <div class="panel">
+        <div class="panel-header">
+            <h3 class="panel-title">🚨 Active High & Emergency Alerts</h3>
+            <span class="status-badge" style="background-color: #fef2f2; color: #dc2626; font-weight: bold; font-size: 0.75rem;">Action Required</span>
+        </div>
+        <div class="table-wrapper">
+            <table class="custom-table" style="font-size: 0.85rem;">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>ASHA Worker</th>
+                        <th>Medicine</th>
+                        <th>Priority</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if emergency_requests %}
+                        {% for req in emergency_requests %}
+                            <tr style="background-color: #fffaf0;">
+                                <td><strong>#REQ-{{ req.id }}</strong></td>
+                                <td>{{ req.asha_worker }} ({{ req.village }})</td>
+                                <td>{{ req.medicine_name }}</td>
+                                <td>
+                                    {% if req.priority == 'High' %}
+                                        <span class="status-badge" style="background-color: #fff7ed; color: #ea580c; padding: 2px 6px;">High</span>
+                                    {% else %}
+                                        <span class="status-badge" style="background-color: #fef2f2; color: #dc2626; font-weight: bold; padding: 2px 6px;">Emergency</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('mandal.request_view', req_id=req.id) }}" class="btn btn-outline btn-xs" style="padding: 4px 8px; font-size: 0.75rem;">
+                                        Review &rarr;
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">No active high or emergency priority requests.</td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Village Report Table -->
+<div class="panel">
+    <div class="panel-header">
+        <h3 class="panel-title">Village-wise Medicine Inventory Tracking</h3>
+        <span style="font-size: 0.85rem; color: var(--text-muted);">Click "Open Register" to audit village stock levels</span>
+    </div>
+    
+    <div class="table-wrapper">
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>Village Name</th>
+                    <th>Assigned ASHA Worker</th>
+                    <th>Total Unique Products</th>
+                    <th>Low Stock Products</th>
+                    <th>Expired Products</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if village_reports %}
+                    {% for report in village_reports %}
+                        <tr>
+                            <td style="font-weight: 600; font-size: 1.05rem;">
+                                🏡 {{ report.village }}
+                            </td>
+                            <td>{{ report.asha_worker }}</td>
+                            <td>{{ report.total_medicines }} medicines</td>
+                            <td>
+                                {% if report.low_stock_items > 0 %}
+                                    <span style="color: var(--color-low); font-weight: 600;">⚠️ {{ report.low_stock_items }} items</span>
+                                {% else %}
+                                    <span style="color: var(--text-muted);">0</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if report.expired_items > 0 %}
+                                    <span style="color: var(--color-expired); font-weight: 600;">❌ {{ report.expired_items }} items</span>
+                                {% else %}
+                                    <span style="color: var(--text-muted);">0</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('mandal.village_inventory', village_name=report.village) }}" class="btn btn-secondary btn-sm" style="padding:6px 12px; font-size:0.85rem;">
+                                    Open Register &rarr;
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 40px 10px;">
+                            No villages registered under your Mandal office.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Charts Section -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 30px;">
+    <div class="panel">
+        <h3 class="panel-title" style="margin-bottom: 15px;">📊 Requests by Village</h3>
+        <div style="height: 250px; display: flex; justify-content: center; align-items: center; position: relative;">
+            <canvas id="villageChart"></canvas>
+        </div>
+    </div>
+    <div class="panel">
+        <h3 class="panel-title" style="margin-bottom: 15px;">📈 Monthly Replenishment Trends</h3>
+        <div style="height: 250px; display: flex; justify-content: center; align-items: center; position: relative;">
+            <canvas id="trendChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        // Village Requests Chart
+        const villageLabels = {{ village_labels|tojson }};
+        const villageValues = {{ village_values|tojson }};
+        
+        if (villageLabels.length > 0) {
+            const villageCtx = document.getElementById('villageChart').getContext('2d');
+            new Chart(villageCtx, {
+                type: 'bar',
+                data: {
+                    labels: villageLabels,
+                    datasets: [{
+                        label: 'Requests Count',
+                        data: villageValues,
+                        backgroundColor: '#6366f1',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                    }
+                }
+            });
+        } else {
+            document.getElementById('villageChart').parentElement.innerHTML = 
+                '<div style="color: var(--text-muted); font-size: 0.9rem;">No request records found.</div>';
+        }
+
+        // Trends Chart
+        const trendLabels = {{ trend_labels|tojson }};
+        const trendValues = {{ trend_values|tojson }};
+        
+        if (trendLabels.length > 0) {
+            const trendCtx = document.getElementById('trendChart').getContext('2d');
+            new Chart(trendCtx, {
+                type: 'line',
+                data: {
+                    labels: trendLabels,
+                    datasets: [{
+                        label: 'Total Requests',
+                        data: trendValues,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                    }
+                }
+            });
+        } else {
+            document.getElementById('trendChart').parentElement.innerHTML = 
+                '<div style="color: var(--text-muted); font-size: 0.9rem;">No request trends found.</div>';
+        }
+    });
+</script>
+{% endblock %}

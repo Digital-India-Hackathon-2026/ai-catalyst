@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ action }} Medicine - Smart Inventory System{% endblock %}
+{% block header_title %}{{ action }} Medicine Register{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width: 700px; margin: 0 auto;">
+    <div class="panel-header">
+        <h3 class="panel-title">{{ action }} Medicine Profile</h3>
+        <a href="{{ url_for('asha.inventory') }}" class="btn btn-outline btn-sm">&larr; Back to Register</a>
+    </div>
+    
+    <form action="{% if action == 'Add' %}{{ url_for('asha.add_medicine') }}{% else %}{{ url_for('asha.edit_medicine', id=medicine_id) }}{% endif %}" method="POST">
+        
+        <!-- Field 1: Medicine Name -->
+        <div class="form-group">
+            <label for="medicine_name">Medicine Name *</label>
+            <input type="text" id="medicine_name" name="medicine_name" required placeholder="e.g. Paracetamol 500mg"
+                   value="{{ form_data.medicine_name if form_data else '' }}">
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <!-- Field 2: Category -->
+            <div class="form-group">
+                <label for="category">Category *</label>
+                <select id="category" name="category" required>
+                    <option value="">Select Category</option>
+                    <option value="Tablets" {% if form_data and form_data.category == 'Tablets' %}selected{% endif %}>Tablets</option>
+                    <option value="Syrups" {% if form_data and form_data.category == 'Syrups' %}selected{% endif %}>Syrups</option>
+                    <option value="Vaccines" {% if form_data and form_data.category == 'Vaccines' %}selected{% endif %}>Vaccines</option>
+                    <option value="Nutrition" {% if form_data and form_data.category == 'Nutrition' %}selected{% endif %}>Nutrition</option>
+                    <option value="Pregnancy" {% if form_data and form_data.category == 'Pregnancy' %}selected{% endif %}>Pregnancy</option>
+                    <option value="Child Care" {% if form_data and form_data.category == 'Child Care' %}selected{% endif %}>Child Care</option>
+                    <option value="Emergency" {% if form_data and form_data.category == 'Emergency' %}selected{% endif %}>Emergency</option>
+                    <option value="First Aid" {% if form_data and form_data.category == 'First Aid' %}selected{% endif %}>First Aid</option>
+                </select>
+            </div>
+            
+            <!-- Field 4: Unit -->
+            <div class="form-group">
+                <label for="unit">Stock Unit *</label>
+                <select id="unit" name="unit" required>
+                    <option value="">Select Unit</option>
+                    <option value="Tablets" {% if form_data and form_data.unit == 'Tablets' %}selected{% endif %}>Tablets</option>
+                    <option value="Capsules" {% if form_data and form_data.unit == 'Capsules' %}selected{% endif %}>Capsules</option>
+                    <option value="Bottles" {% if form_data and form_data.unit == 'Bottles' %}selected{% endif %}>Bottles</option>
+                    <option value="Sachets" {% if form_data and form_data.unit == 'Sachets' %}selected{% endif %}>Sachets</option>
+                    <option value="Ointments" {% if form_data and form_data.unit == 'Ointments' %}selected{% endif %}>Ointments</option>
+                </select>
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <!-- Field 3: Quantity -->
+            <div class="form-group">
+                <label for="quantity">Initial Quantity *</label>
+                <input type="number" id="quantity" name="quantity" min="0" required placeholder="e.g. 100"
+                       value="{{ form_data.quantity if form_data else '' }}">
+            </div>
+            
+            <!-- Field 8: Minimum Stock Level -->
+            <div class="form-group">
+                <label for="minimum_stock">Minimum Alert Stock Level *</label>
+                <input type="number" id="minimum_stock" name="minimum_stock" min="0" required placeholder="e.g. 20"
+                       value="{{ form_data.minimum_stock if form_data else '' }}">
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <!-- Field 5: Batch Number -->
+            <div class="form-group">
+                <label for="batch_number">Batch Number *</label>
+                <input type="text" id="batch_number" name="batch_number" required placeholder="e.g. BATCH123"
+                       value="{{ form_data.batch_number if form_data else '' }}">
+            </div>
+            
+            <!-- Field 6: Manufacturer -->
+            <div class="form-group">
+                <label for="manufacturer">Manufacturer / Supplier *</label>
+                <input type="text" id="manufacturer" name="manufacturer" required placeholder="e.g. Cipla, Sun Pharma"
+                       value="{{ form_data.manufacturer if form_data else '' }}">
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <!-- Field 7: Mfg Date -->
+            <div class="form-group">
+                <label for="mfg_date">Manufacturing Date *</label>
+                <input type="date" id="mfg_date" name="mfg_date" required
+                       value="{{ form_data.mfg_date if form_data else '' }}">
+            </div>
+            
+            <!-- Field 8: Expiry Date -->
+            <div class="form-group">
+                <label for="expiry_date">Expiry Date *</label>
+                <input type="date" id="expiry_date" name="expiry_date" required
+                       value="{{ form_data.expiry_date if form_data else '' }}">
+            </div>
+        </div>
+        
+
+        
+        <div class="btn-group" style="margin-top: 20px;">
+            <button type="submit" class="btn btn-primary">Save Medicine Profile</button>
+            {% if action == 'Add' %}
+                <button type="reset" class="btn btn-outline">Reset Form</button>
+            {% else %}
+                <a href="{{ url_for('asha.inventory') }}" class="btn btn-outline">Cancel</a>
+            {% endif %}
+        </div>
+        
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+
+{% block title %}Record Distribution - Smart Inventory System{% endblock %}
+{% block header_title %}Medicine Distribution Log{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width: 700px; margin: 0 auto;">
+    <div class="panel-header">
+        <h3 class="panel-title">Record Stock Distribution</h3>
+        <a href="{{ url_for('asha.asha_dashboard') }}" class="btn btn-outline btn-sm">&larr; Back to Dashboard</a>
+    </div>
+    
+    <form action="{{ url_for('asha.distribution') }}" method="POST">
+        
+        <!-- Field 1: Beneficiary Name -->
+        <div class="form-group">
+            <label for="beneficiary_name">Beneficiary Name *</label>
+            <input type="text" id="beneficiary_name" name="beneficiary_name" required placeholder="e.g. Ramesh Kumar"
+                   value="{{ form_data.beneficiary_name if form_data else '' }}">
+        </div>
+        
+        <!-- Field 2: Village Name (Prefilled / Read Only) -->
+        <div class="form-group">
+            <label for="village">Village (Pre-filled from Session)</label>
+            <input type="text" id="village" name="village" value="{{ session['village'] }}" readonly 
+                   style="background-color: #e2e8f0; cursor: not-allowed; font-weight:600; color:var(--text-muted);">
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <!-- Field 3: Medicine Selection Dropdown -->
+            <div class="form-group">
+                <label for="medicine_id">Select Medicine *</label>
+                <select id="medicine_id" name="medicine_id" required>
+                    <option value="">Select Medicine</option>
+                    {% for med in medicines %}
+                        <option value="{{ med.id }}" {% if form_data and form_data.medicine_id|int == med.id %}selected{% endif %}>
+                            {{ med.medicine_name }} (Available: {{ med.quantity }} {{ med.unit }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- Field 4: Quantity -->
+            <div class="form-group">
+                <label for="quantity">Quantity to Distribute *</label>
+                <input type="number" id="quantity" name="quantity" min="1" required placeholder="e.g. 5"
+                       value="{{ form_data.quantity if form_data else '' }}">
+            </div>
+        </div>
+        
+        <!-- Field 5: Distribution Date -->
+        <div class="form-group">
+            <label for="distribution_date">Distribution Date *</label>
+            <input type="date" id="distribution_date" name="distribution_date" required
+                   value="{{ form_data.distribution_date if form_data else default_date }}">
+        </div>
+        
+        <!-- Field 6: Remarks -->
+        <div class="form-group">
+            <label for="remarks">Remarks / Justification</label>
+            <textarea id="remarks" name="remarks" placeholder="Enter notes here (e.g. prescribed dosage, symptoms)..." rows="3">{{ form_data.remarks if form_data else '' }}</textarea>
+        </div>
+        
+        <div class="btn-group" style="margin-top: 20px;">
+            <button type="submit" class="btn btn-primary">Submit Distribution</button>
+            <button type="reset" class="btn btn-outline">Reset Form</button>
+        </div>
+        
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,222 @@
+{% extends 'base.html' %}
+
+{% block title %}Medicine Inventory - Smart Inventory System{% endblock %}
+{% block header_title %}Medicine Inventory Register{% endblock %}
+
+{% block content %}
+<div class="panel">
+    <div class="panel-header">
+        <h3 class="panel-title">Active Stock Register</h3>
+        <a href="{{ url_for('asha.add_medicine') }}" class="btn btn-primary btn-sm">➕ Add New Medicine</a>
+    </div>
+    
+    <!-- Fast Live Search and Filter Bar -->
+    <div class="filter-bar">
+        <div class="search-box">
+            <input type="text" id="liveSearchInput" placeholder="Live search by name or batch..." value="">
+        </div>
+        
+        <select id="liveCategoryFilter" class="filter-select">
+            <option value="">All Categories</option>
+            {% for cat in categories %}
+                <option value="{{ cat }}">{{ cat }}</option>
+            {% endfor %}
+        </select>
+        
+        <button id="resetFiltersBtn" class="btn btn-outline" style="padding: 10px 16px; font-size: 0.9rem;">Reset Filters</button>
+    </div>
+    
+    <!-- Table Wrapper -->
+    <div class="table-wrapper">
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>Medicine Name</th>
+                    <th>Category</th>
+                    <th>Qty / Stock</th>
+                    <th>Batch</th>
+                    <th>Mfg / Expiry</th>
+                    <th>Status</th>
+                    <th>AI Restock 🧠</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if medicines %}
+                    {% for med in medicines %}
+                        <tr class="medicine-row {% if med.quantity|int <= med.minimum_stock|int %}critical-stock-row{% endif %}" 
+                            data-name="{{ med.name|lower }}" 
+                            data-batch="{{ med.batch_number|lower }}" 
+                            data-category="{{ med.category|lower }}">
+                            <td style="font-weight: 600;">{{ med.name }}</td>
+                            <td>{{ med.category }}</td>
+                            <td>{{ med.quantity }} / {{ med.minimum_stock }} {{ med.unit }}</td>
+                            <td><code>{{ med.batch_number }}</code></td>
+                            <td style="font-size: 0.85rem;">
+                                <div style="color: var(--text-muted);">M: {{ med.mfg_date }}</div>
+                                <div>E: {{ med.expiry_date }}</div>
+                            </td>
+                            <td>
+                                {% if med.status == 'Safe' %}
+                                    <span class="badge badge-available">Safe</span>
+                                {% elif med.status == 'Out of Stock' %}
+                                    <span class="badge badge-expired" style="background: #991b1b; color: white;">Out of Stock</span>
+                                {% elif med.status == 'Low Stock' %}
+                                    <span class="badge badge-low">Low Stock</span>
+                                {% elif med.status == 'Expiring Soon' %}
+                                    <span class="badge badge-expiring">Expiring Soon</span>
+                                {% else %}
+                                    <span class="badge badge-expired">Expired</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if med.recommended_restock > 0 %}
+                                    <span style="font-weight: bold; color: #4f46e5;">+{{ med.recommended_restock }}</span>
+                                {% else %}
+                                    <span style="color: var(--text-muted);">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="actions-cell">
+                                    <!-- View Button -->
+                                    <button class="btn-icon view-btn view-med-btn" title="View details"
+                                            data-name="{{ med.name }}"
+                                            data-category="{{ med.category }}"
+                                            data-quantity="{{ med.quantity }}"
+                                            data-unit="{{ med.unit }}"
+                                            data-batch="{{ med.batch_number }}"
+                                            data-manufacturer="{{ med.manufacturer }}"
+                                            data-expiry="{{ med.expiry_date }}"
+                                            data-min-stock="{{ med.minimum_stock }}"
+                                            data-status="{{ med.status }}">
+                                        👁️
+                                    </button>
+                                    
+                                    <!-- Edit Button -->
+                                    <a href="{{ url_for('asha.edit_medicine', id=med.id) }}" class="btn-icon edit-btn" title="Edit details">
+                                        ✏️
+                                    </a>
+                                    
+                                    <!-- Delete Button -->
+                                    <form class="delete-med-form" action="{{ url_for('asha.delete_medicine', id=med.id) }}" 
+                                          method="POST" data-med-name="{{ med.name }}" style="display:inline;">
+                                        <button type="submit" class="btn-icon delete-btn" title="Delete medicine">
+                                            🗑️
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 40px 10px;">
+                            No medicines found in your inventory register.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: View Details -->
+<div class="modal" id="view-details-modal">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3>Medicine Details</h3>
+            <button class="modal-close" style="background:none; border:none; font-size:1.5rem; cursor:pointer;">&times;</button>
+        </div>
+        <div class="modal-body" style="padding: 0;">
+            <table class="custom-table" style="font-size:0.9rem;">
+                <tbody>
+                    <tr>
+                        <td style="font-weight:600; width:40%;">Medicine Name</td>
+                        <td id="det-name"></td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight:600;">Category</td>
+                        <td id="det-category"></td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight:600;">Current Stock</td>
+                        <td id="det-quantity"></td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight:600;">Batch Number</td>
+                        <td id="det-batch"></td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight:600;">Manufacturer</td>
+                        <td id="det-manufacturer"></td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight:600;">Expiry Date</td>
+                        <td id="det-expiry"></td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight:600;">Minimum Stock Level</td>
+                        <td id="det-min-stock"></td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight:600;">System Status</td>
+                        <td><span id="det-status"></span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-primary btn-close-modal">Close</button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .critical-stock-row {
+        background-color: #fef2f2 !important; /* light red */
+    }
+    .critical-stock-row:hover {
+        background-color: #fee2e2 !important;
+    }
+</style>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const searchInput = document.getElementById("liveSearchInput");
+        const categoryFilter = document.getElementById("liveCategoryFilter");
+        const resetBtn = document.getElementById("resetFiltersBtn");
+        const tableRows = document.querySelectorAll(".medicine-row");
+
+        function filterTable() {
+            const query = searchInput.value.toLowerCase().trim();
+            const selectedCategory = categoryFilter.value.toLowerCase().trim();
+
+            tableRows.forEach(row => {
+                const name = row.dataset.name || "";
+                const batch = row.dataset.batch || "";
+                const category = (row.dataset.category || "").toLowerCase();
+
+                const matchesSearch = name.includes(query) || batch.includes(query);
+                const matchesCategory = selectedCategory === "" || category === selectedCategory;
+
+                if (matchesSearch && matchesCategory) {
+                    row.style.display = "";
+                } else {
+                    row.style.display = "none";
+                }
+            });
+        }
+
+        if(searchInput) searchInput.addEventListener("keyup", filterTable);
+        if(categoryFilter) categoryFilter.addEventListener("change", filterTable);
+        if(resetBtn) {
+            resetBtn.addEventListener("click", (e) => {
+                e.preventDefault();
+                searchInput.value = "";
+                categoryFilter.value = "";
+                filterTable();
+            });
+        }
+    });
+</script>
+{% endblock %}

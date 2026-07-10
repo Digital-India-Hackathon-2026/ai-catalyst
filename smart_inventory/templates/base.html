@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Smart Inventory for ASHA Workers{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Load Chart.js for data visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="{% block body_class %}{% endblock %}">
+
+    <!-- Toast Notifications -->
+    <div class="toast-messages">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="toast {{ category }}">
+                        <span>{{ message }}</span>
+                        <button class="toast-close">&times;</button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    {% if session.get('role') %}
+    <!-- Logged In Layout -->
+    <div class="app-layout">
+        
+        <!-- Sidebar Navigation -->
+        <aside class="app-sidebar">
+            <div class="sidebar-logo">
+                <span class="sidebar-logo-icon">🏥</span>
+                <span class="sidebar-logo-text">ASHA Inventory</span>
+            </div>
+            
+            <ul class="sidebar-nav">
+                {% if session['role'] == 'asha' %}
+                    <li>
+                        <a href="{{ url_for('asha.asha_dashboard') }}" class="sidebar-link {% if request.endpoint == 'asha.asha_dashboard' %}active{% endif %}">
+                            <span class="sidebar-logo-icon">📊</span>
+                            <span>Dashboard</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('asha.inventory') }}" class="sidebar-link {% if request.endpoint == 'asha.inventory' or request.endpoint == 'asha.edit_medicine' %}active{% endif %}">
+                            <span class="sidebar-logo-icon">📦</span>
+                            <span>Medicine Inventory</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('asha.add_medicine') }}" class="sidebar-link {% if request.endpoint == 'asha.add_medicine' %}active{% endif %}">
+                            <span class="sidebar-logo-icon">➕</span>
+                            <span>Add Medicine</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('asha.distribution') }}" class="sidebar-link {% if request.endpoint == 'asha.distribution' %}active{% endif %}">
+                            <span class="sidebar-logo-icon">🤝</span>
+                            <span>Stock Distribution</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('asha.transactions') }}" class="sidebar-link {% if request.endpoint == 'asha.transactions' %}active{% endif %}">
+                            <span class="sidebar-logo-icon">📜</span>
+                            <span>Transaction History</span>
+                        </a>
+                    <li>
+                        <a href="{{ url_for('asha.request_history') }}" class="sidebar-link {% if 'request' in request.endpoint or 'delivery' in request.endpoint %}active{% endif %}">
+                            <span class="sidebar-logo-icon">📝</span>
+                            <span>Request Stocks</span>
+                        </a>
+                    </li>
+                {% elif session['role'] == 'mandal' %}
+                    <li>
+                        <a href="{{ url_for('mandal.mandal_dashboard') }}" class="sidebar-link {% if request.endpoint == 'mandal.mandal_dashboard' or request.endpoint == 'mandal.village_inventory' or (request.endpoint == 'mandal.request_view' and not session['role'] == 'asha') %}active{% endif %}">
+                            <span class="sidebar-logo-icon">🏥</span>
+                            <span>Mandal Dashboard</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('mandal.reports') }}" class="sidebar-link {% if request.endpoint == 'mandal.reports' %}active{% endif %}">
+                            <span class="sidebar-logo-icon">📊</span>
+                            <span>Mandal Reports</span>
+                        </a>
+                    </li>
+                {% endif %}
+                
+                <li>
+                    <a href="{{ url_for('auth.logout') }}" class="sidebar-link">
+                        <span class="sidebar-logo-icon">🚪</span>
+                        <span>Logout</span>
+                    </a>
+                </li>
+            </ul>
+            
+            <div class="sidebar-user">
+                <div class="sidebar-user-name">{{ session['name'] }}</div>
+                <div class="sidebar-user-role">
+                    {% if session['role'] == 'asha' %}
+                        ASHA Worker ({{ session['village'] }})
+                    {% else %}
+                        Mandal Hospital ({{ session['mandal'] }})
+                    {% endif %}
+                </div>
+            </div>
+        </aside>
+        
+        <!-- Main Content Area -->
+        <main class="app-content">
+            <!-- App Header -->
+            <header class="app-header text-print-hide">
+                <div class="header-title">
+                    <h2>{% block header_title %}Dashboard{% endblock %}</h2>
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 20px;">
+                    <!-- Notification Bell Dropdown -->
+                    <div class="notif-wrapper" style="position: relative;">
+                        <button class="notif-bell-btn" id="notif-bell-btn">
+                            🔔
+                            {% if unread_notifications_count > 0 %}
+                                <span class="notif-badge">
+                                    {{ unread_notifications_count }}
+                                </span>
+                            {% endif %}
+                        </button>
+                        
+                        <div class="notif-dropdown" id="notif-dropdown">
+                            <div class="notif-dropdown-header">
+                                <span>Recent Notifications</span>
+                                <a href="{% if session['role'] == 'asha' %}{{ url_for('asha.notifications') }}{% else %}{{ url_for('mandal.notifications') }}{% endif %}">View All</a>
+                            </div>
+                            <div class="notif-dropdown-body">
+                                {% if recent_notifications %}
+                                    {% for notif in recent_notifications %}
+                                        <div class="notif-dropdown-item {% if notif.is_read == 0 %}unread{% endif %}">
+                                            <p>{{ notif.message }}</p>
+                                            <span class="notif-dropdown-time">{{ notif.created_at }}</span>
+                                        </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="notif-dropdown-empty">
+                                        No recent notifications.
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="header-meta">
+                        <span>District Health Portal</span> &nbsp;|&nbsp; 
+                        <span id="header-date">July 10, 2026</span>
+                    </div>
+                </div>
+            </header>
+            
+            <!-- Main Content View -->
+            <div class="main-view">
+                {% block content %}{% endblock %}
+            </div>
+            
+            <!-- App Footer -->
+            <footer class="app-footer">
+                <p>&copy; 2026 Department of Health, Medical & Family Welfare. All Rights Reserved.</p>
+            </footer>
+        </main>
+        
+    </div>
+    {% else %}
+    <!-- Guest Layout (Landing & Login) -->
+    <div class="landing-body">
+        {% block guest_content %}{% endblock %}
+    </div>
+    {% endif %}
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        // Set dynamic date in header if loaded
+        const dateSpan = document.getElementById("header-date");
+        if (dateSpan) {
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            dateSpan.textContent = new Date().toLocaleDateString('en-IN', options);
+        }
+    </script>
+</body>
+</html>

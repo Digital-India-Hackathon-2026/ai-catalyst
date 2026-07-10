@@ -1,0 +1,279 @@
+{% extends 'base.html' %}
+
+{% block title %}ASHA Dashboard - Smart Inventory System{% endblock %}
+{% block header_title %}ASHA Worker Dashboard{% endblock %}
+
+{% block content %}
+<!-- Alerts Section -->
+{% if alerts %}
+<div class="alerts-container">
+    {% for alert in alerts %}
+        <div class="alert-item {{ alert.type }}">
+            <span class="alert-icon">⚠️</span>
+            <span>{{ alert.message }}</span>
+        </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Dashboard Cards -->
+<div class="metrics-grid">
+    <!-- Card 1: Total Medicines -->
+    <div class="metric-card">
+        <div class="metric-info">
+            <h4>Total Medicines</h4>
+            <div class="metric-value">{{ total_medicines }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--primary);">💊</div>
+    </div>
+    
+    <!-- Card 2: Available Stock -->
+    <div class="metric-card success">
+        <div class="metric-info">
+            <h4>Available Stock</h4>
+            <div class="metric-value">{{ available_stock }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--color-available);">📦</div>
+    </div>
+    
+    <!-- Card 3: Low Stock Medicines -->
+    <div class="metric-card warning">
+        <div class="metric-info">
+            <h4>Low Stock</h4>
+            <div class="metric-value">{{ low_stock_count }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--color-low);">⚠️</div>
+    </div>
+    
+    <!-- Card 3.5: Out of Stock -->
+    <div class="metric-card danger" style="border-left-color: #991b1b;">
+        <div class="metric-info">
+            <h4>Out of Stock</h4>
+            <div class="metric-value">{{ out_of_stock_count }}</div>
+        </div>
+        <div class="metric-icon" style="color: #991b1b;">🛑</div>
+    </div>
+    
+    <!-- Card 4: Expired Medicines -->
+    <div class="metric-card danger">
+        <div class="metric-info">
+            <h4>Expired Items</h4>
+            <div class="metric-value">{{ expired_count }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--color-expired);">❌</div>
+    </div>
+    
+    <!-- Card 5: Medicines Expiring Soon -->
+    <div class="metric-card info">
+        <div class="metric-info">
+            <h4>Expiring Soon</h4>
+            <div class="metric-value">{{ expiring_soon_count }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--color-expiring);">⏳</div>
+    </div>
+    <!-- Card 6: Medicines Distributed Today -->
+    <div class="metric-card success">
+        <div class="metric-info">
+            <h4>Distributed Today</h4>
+            <div class="metric-value">{{ distributed_today }}</div>
+        </div>
+        <div class="metric-icon" style="color: var(--secondary-light);">🤝</div>
+    </div>
+    
+    <!-- Card 7: Pending Requests -->
+    <div class="metric-card warning">
+        <div class="metric-info">
+            <h4>Pending Requests</h4>
+            <div class="metric-value">{{ pending_requests_count }}</div>
+        </div>
+        <div class="metric-icon" style="color: #ea580c;">⏳</div>
+    </div>
+
+    <!-- Card 8: Approved Requests -->
+    <div class="metric-card info">
+        <div class="metric-info">
+            <h4>Approved Requests</h4>
+            <div class="metric-value">{{ approved_requests_count }}</div>
+        </div>
+        <div class="metric-icon" style="color: #2563eb;">✔️</div>
+    </div>
+
+    <!-- Card 9: Delivered Requests -->
+    <div class="metric-card success">
+        <div class="metric-info">
+            <h4>Delivered Requests</h4>
+            <div class="metric-value">{{ delivered_requests_count }}</div>
+        </div>
+        <div class="metric-icon" style="color: #10b981;">📦</div>
+    </div>
+</div>
+
+<!-- Welcome Panel -->
+<div class="panel">
+    <h3 class="panel-title" style="margin-bottom: 12px; color: var(--primary);">Welcome to your Digital Register</h3>
+    <p style="color: var(--text-muted); line-height: 1.6; font-size: 0.95rem;">
+        This portal replaces the manual paper register. You can check the current medicine levels, request replenishment stock from Mandal Hospital, record medicines distributed to local village beneficiaries, and track inventory movements. Use the sidebar navigation on the left to start.
+    </p>
+    
+    <div class="btn-group" style="margin-top: 20px;">
+        <a href="{{ url_for('asha.inventory') }}" class="btn btn-primary">View Inventory</a>
+        <a href="{{ url_for('asha.request_new') }}" class="btn btn-secondary">+ Request Stocks</a>
+    </div>
+</div>
+
+<!-- Charts Panel -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 30px;">
+    <div class="panel">
+        <h3 class="panel-title" style="margin-bottom: 15px;">📊 Requests by Priority</h3>
+        <div style="height: 250px; display: flex; justify-content: center; align-items: center; position: relative;">
+            <canvas id="priorityChart"></canvas>
+        </div>
+    </div>
+    <div class="panel">
+        <h3 class="panel-title" style="margin-bottom: 15px;">📈 Requests by Status</h3>
+        <div style="height: 250px; display: flex; justify-content: center; align-items: center; position: relative;">
+            <canvas id="statusChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Phase 3 Analytics Charts Panel -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 30px;">
+    <div class="panel">
+        <h3 class="panel-title" style="margin-bottom: 15px;">📅 7-Day Usage Trend</h3>
+        <div style="height: 250px; display: flex; justify-content: center; align-items: center; position: relative;">
+            <canvas id="usageTrendChart"></canvas>
+        </div>
+    </div>
+    <div class="panel">
+        <h3 class="panel-title" style="margin-bottom: 15px;">💊 Usage by Category (30 Days)</h3>
+        <div style="height: 250px; display: flex; justify-content: center; align-items: center; position: relative;">
+            <canvas id="usageCategoryChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        // Priority Chart
+        const priorityLabels = {{ priority_labels|tojson }};
+        const priorityValues = {{ priority_values|tojson }};
+        
+        if (priorityLabels.length > 0) {
+            const priorityCtx = document.getElementById('priorityChart').getContext('2d');
+            new Chart(priorityCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: priorityLabels,
+                    datasets: [{
+                        data: priorityValues,
+                        backgroundColor: ['#3b82f6', '#f97316', '#ef4444', '#64748b'],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+        } else {
+            document.getElementById('priorityChart').parentElement.innerHTML = 
+                '<div style="color: var(--text-muted); font-size: 0.9rem;">No requests submitted yet.</div>';
+        }
+
+        // Status Chart
+        const statusLabels = {{ status_labels|tojson }};
+        const statusValues = {{ status_values|tojson }};
+        
+        if (statusLabels.length > 0) {
+            const statusCtx = document.getElementById('statusChart').getContext('2d');
+            new Chart(statusCtx, {
+                type: 'bar',
+                data: {
+                    labels: statusLabels,
+                    datasets: [{
+                        label: 'Request Status',
+                        data: statusValues,
+                        backgroundColor: '#10b981',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                    }
+                }
+            });
+        } else {
+            document.getElementById('statusChart').parentElement.innerHTML = 
+                '<div style="color: var(--text-muted); font-size: 0.9rem;">No requests submitted yet.</div>';
+        }
+
+        // Phase 3: Daily Usage Trend Chart (Line Chart)
+        const trendLabels = {{ usage_trend_labels|tojson }};
+        const trendValues = {{ usage_trend_values|tojson }};
+        
+        if (trendLabels.length > 0) {
+            const trendCtx = document.getElementById('usageTrendChart').getContext('2d');
+            new Chart(trendCtx, {
+                type: 'line',
+                data: {
+                    labels: trendLabels,
+                    datasets: [{
+                        label: 'Medicines Distributed',
+                        data: trendValues,
+                        borderColor: '#2563eb',
+                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        } else {
+            document.getElementById('usageTrendChart').parentElement.innerHTML = 
+                '<div style="color: var(--text-muted); font-size: 0.9rem;">No distribution data for last 7 days.</div>';
+        }
+
+        // Phase 3: Usage by Category Chart (Doughnut Chart)
+        const categoryLabels = {{ usage_category_labels|tojson }};
+        const categoryValues = {{ usage_category_values|tojson }};
+        
+        if (categoryLabels.length > 0) {
+            const categoryCtx = document.getElementById('usageCategoryChart').getContext('2d');
+            new Chart(categoryCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: categoryLabels,
+                    datasets: [{
+                        data: categoryValues,
+                        backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e', '#64748b'],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'right' } }
+                }
+            });
+        } else {
+            document.getElementById('usageCategoryChart').parentElement.innerHTML = 
+                '<div style="color: var(--text-muted); font-size: 0.9rem;">No distribution data for last 30 days.</div>';
+        }
+    });
+</script>
+{% endblock %}

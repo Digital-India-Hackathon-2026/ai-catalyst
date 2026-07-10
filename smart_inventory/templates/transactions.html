@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+
+{% block title %}Transaction History - Smart Inventory System{% endblock %}
+{% block header_title %}Inventory Transaction Ledger{% endblock %}
+
+{% block content %}
+<div class="panel">
+    <div class="panel-header">
+        <h3 class="panel-title">System Transaction Logs</h3>
+        <span style="font-size: 0.85rem; color: var(--text-muted);">Real-time audit history of inventory adjustments</span>
+    </div>
+    
+    <!-- Filter and Search Bar -->
+    <form method="GET" action="{{ url_for('asha.transactions') }}" class="filter-bar">
+        <div class="search-box">
+            <input type="text" name="search" placeholder="Search by medicine, action, or remarks..." value="{{ search }}">
+        </div>
+        
+        <button type="submit" class="btn btn-primary" style="padding: 10px 20px;">🔍 Search Logs</button>
+        {% if search %}
+            <a href="{{ url_for('asha.transactions') }}" class="btn btn-outline" style="padding: 10px 16px; font-size: 0.9rem;">Reset</a>
+        {% endif %}
+    </form>
+    
+    <!-- Table Wrapper -->
+    <div class="table-wrapper">
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Medicine</th>
+                    <th>Batch</th>
+                    <th>Action</th>
+                    <th>Quantity Affected</th>
+                    <th>Log / Remarks</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if transactions %}
+                    {% for tx in transactions %}
+                        <tr>
+                            <td style="white-space: nowrap; font-size: 0.85rem; color: var(--text-muted);">
+                                {{ tx.created_at }}
+                            </td>
+                            <td style="font-weight: 600;">
+                                {{ tx.medicine_name if tx.medicine_name else 'Deleted Medicine (ID: ' ~ tx.medicine_id ~ ')' }}
+                            </td>
+                            <td>
+                                <code>{{ tx.batch_number if tx.batch_number else 'N/A' }}</code>
+                            </td>
+                            <td>
+                                {% if tx.action == 'Added' %}
+                                    <span style="color: var(--color-available); font-weight: 700;">➕ Added</span>
+                                {% elif tx.action == 'Distributed' %}
+                                    <span style="color: var(--color-low); font-weight: 700;">🤝 Distributed</span>
+                                {% elif tx.action == 'Updated' %}
+                                    <span style="color: var(--primary-light); font-weight: 700;">✏️ Updated</span>
+                                {% elif tx.action == 'Deleted' %}
+                                    <span style="color: var(--color-expired); font-weight: 700;">🗑️ Deleted</span>
+                                {% else %}
+                                    <span style="color: var(--text-muted); font-weight: 700;">{{ tx.action }}</span>
+                                {% endif %}
+                            </td>
+                            <td style="font-weight: 600;">
+                                {{ tx.quantity }} {{ tx.unit if tx.unit else '' }}
+                            </td>
+                            <td style="font-size: 0.9rem; color: var(--text-muted);">
+                                {{ tx.remarks }}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 40px 10px;">
+                            No transaction ledger entries match your filter.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

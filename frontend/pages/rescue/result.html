@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Analysis Result | Rescue – GovConnect</title>
+  <meta name="description" content="AI emergency analysis result. View incident type, severity, recommended rescue team, and current dispatch status.">
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/rescue.css">
+</head>
+<body>
+
+  <!-- Shared Navbar -->
+  <div id="navbar-placeholder"></div>
+
+  <!-- Toast -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <main class="container rescue-page">
+
+    <!-- Module Header -->
+    <section class="module-header">
+      <a href="index.html" class="back-link">← Report New Emergency</a>
+      <div class="module-title-row">
+        <h1>🧠 AI Analysis Result</h1>
+        <span class="module-badge rescue">Rescue &amp; Emergency</span>
+      </div>
+      <p style="color:var(--text-secondary);font-size:0.95rem;margin-top:0.5rem;">
+        Your emergency has been classified by our AI engine. Review the result and track the rescue status below.
+      </p>
+    </section>
+
+    <!-- Result Root – populated by JS -->
+    <div id="result-root">
+      <div class="empty-state">
+        <div class="empty-icon">⏳</div>
+        <p>Loading analysis result…</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Shared Footer -->
+  <div id="footer-placeholder"></div>
+
+  <script src="../../components/navbar.js"></script>
+  <script src="../../components/footer.js"></script>
+  <script type="module">
+    import { initResultPage } from '../../js/rescue.js';
+    initResultPage();
+  </script>
+
+</body>
+</html>

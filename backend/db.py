@@ -106,7 +106,65 @@ def init_db():
         timestamp TEXT NOT NULL
     );
     """)
-    
+
+    # 6. Rescue Emergencies Table (Rescue Module - Phase 1)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS rescue_emergencies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        emergency_id TEXT UNIQUE NOT NULL,
+        description TEXT NOT NULL,
+        image_path TEXT,
+        lat REAL,
+        lng REAL,
+        landmark TEXT,
+        incident_type TEXT NOT NULL,
+        severity TEXT CHECK(severity IN ('Low', 'Medium', 'High', 'Critical')) NOT NULL,
+        recommended_team TEXT NOT NULL,
+        response_time_minutes INTEGER NOT NULL,
+        confidence_score INTEGER NOT NULL,
+        status TEXT DEFAULT 'Complaint Submitted' CHECK(status IN (
+            'Complaint Submitted',
+            'AI Analysis Complete',
+            'Team Assigned',
+            'Team Dispatched',
+            'Team Arrived',
+            'Rescue Completed',
+            'Case Closed',
+            'Pending Supervisor Approval',
+            'Auto Dispatched',
+            'Pending Review'
+        )) NOT NULL,
+        supervisor_note TEXT,
+        submitted_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        recommended_departments TEXT,
+        nearest_rescue_team TEXT
+    );
+    """)
+
+    # Safe Migrations to add columns if they do not exist
+    try:
+        cursor.execute("SELECT recommended_departments FROM rescue_emergencies LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE rescue_emergencies ADD COLUMN recommended_departments TEXT")
+    try:
+        cursor.execute("SELECT nearest_rescue_team FROM rescue_emergencies LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE rescue_emergencies ADD COLUMN nearest_rescue_team TEXT")
+
+
+    # 7. Rescue Audit Logs Table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS rescue_audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        emergency_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        action TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        timestamp TEXT NOT NULL
+    );
+    """)
+
     # Seed default data if users table is empty
     cursor.execute("SELECT COUNT(*) FROM users")
     if cursor.fetchone()[0] == 0:
@@ -226,6 +284,79 @@ def init_db():
                        (citizen_id, 'New task "Sewer overflow near Osmania Hospital" has been auto-assigned to Mohammed Ali.', 'info', yesterday.isoformat()))
         cursor.execute("INSERT INTO notifications (user_id, message, type, created_at) VALUES (?, ?, ?, ?)",
                        (3, 'New emergency assignment received: Sewer overflow near Osmania Hospital.', 'emergency', yesterday.isoformat()))
+
+    # Seed Rescue Emergencies if table is empty
+    cursor.execute("SELECT COUNT(*) FROM rescue_emergencies")
+    if cursor.fetchone()[0] == 0:
+        seed_now = datetime.now()
+        seed_yesterday = seed_now - timedelta(hours=3)
+        seed_two_hours = seed_now - timedelta(hours=1)
+
+        # 1. Critical – Auto Dispatched (fire)
+        cursor.execute("""
+        INSERT INTO rescue_emergencies
+            (emergency_id, description, lat, lng, landmark, incident_type, severity,
+             recommended_team, response_time_minutes, confidence_score, status, submitted_at, updated_at,
+             recommended_departments, nearest_rescue_team)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            'RES-0001',
+            'Massive fire broke out in a multi-storey apartment building near Ameerpet X Road. Multiple families trapped on upper floors. Smoke visible from 2 km away.',
+            17.4370, 78.4482, 'Ameerpet X Road Apartment, Hyderabad',
+            'Fire Emergency', 'Critical',
+            'Fire Response Unit', 8, 96,
+            'Auto Dispatched',
+            seed_yesterday.isoformat(), seed_yesterday.isoformat(),
+            'Fire Services, Disaster Management, Health Dept', 'Ameerpet Fire Station Unit'
+        ))
+        cursor.execute("""
+        INSERT INTO rescue_audit_logs (emergency_id, event_type, action, actor, timestamp)
+        VALUES (?, ?, ?, ?, ?)
+        """, ('RES-0001', 'AUTO_DISPATCH', 'System auto-dispatched Fire Response Unit due to Critical severity.', 'AI System', seed_yesterday.isoformat()))
+
+        # 2. High – Pending Supervisor Approval (accident)
+        cursor.execute("""
+        INSERT INTO rescue_emergencies
+            (emergency_id, description, lat, lng, landmark, incident_type, severity,
+             recommended_team, response_time_minutes, confidence_score, status, submitted_at, updated_at,
+             recommended_departments, nearest_rescue_team)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            'RES-0002',
+            'Severe road accident on Outer Ring Road near Gachibowli. Two vehicles overturned, 4 people injured, one person still trapped inside a car.',
+            17.4400, 78.3489, 'ORR Gachibowli Flyover, Hyderabad',
+            'Road Accident', 'High',
+            'Emergency Response Team', 15, 88,
+            'Pending Supervisor Approval',
+            seed_two_hours.isoformat(), seed_two_hours.isoformat(),
+            'Police Department, Health Department (108)', 'Madhapur Patrol Unit'
+        ))
+        cursor.execute("""
+        INSERT INTO rescue_audit_logs (emergency_id, event_type, action, actor, timestamp)
+        VALUES (?, ?, ?, ?, ?)
+        """, ('RES-0002', 'AI_ANALYSIS', 'AI classified as High severity Road Accident. Awaiting supervisor approval.', 'AI System', seed_two_hours.isoformat()))
+
+        # 3. Low – Pending Review (fallen tree)
+        cursor.execute("""
+        INSERT INTO rescue_emergencies
+            (emergency_id, description, lat, lng, landmark, incident_type, severity,
+             recommended_team, response_time_minutes, confidence_score, status, submitted_at, updated_at,
+             recommended_departments, nearest_rescue_team)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            'RES-0003',
+            'A tree has fallen on the road near Jubilee Hills Road No. 36 due to last night winds. It is partially blocking traffic but no injuries reported.',
+            17.4323, 78.4066, 'Jubilee Hills Road No 36',
+            'Fallen Tree / Debris', 'Low',
+            'Civic Emergency Team', 45, 78,
+            'Pending Review',
+            seed_now.isoformat(), seed_now.isoformat(),
+            'Forest Department, Municipal Corp (GHMC)', 'Kondapur Municipal Crew'
+        ))
+        cursor.execute("""
+        INSERT INTO rescue_audit_logs (emergency_id, event_type, action, actor, timestamp)
+        VALUES (?, ?, ?, ?, ?)
+        """, ('RES-0003', 'AI_ANALYSIS', 'AI classified as Low severity Fallen Tree. Pending review queue.', 'AI System', seed_now.isoformat()))
 
     conn.commit()
     conn.close()

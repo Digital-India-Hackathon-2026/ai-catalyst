@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control Room – Rescue Dashboard | GovConnect</title>
+  <meta name="description" content="Supervisor control room for rescue emergencies. Approve, modify or close emergency cases. Critical cases are auto-dispatched.">
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/rescue.css">
+</head>
+<body>
+
+  <!-- Shared Navbar -->
+  <div id="navbar-placeholder"></div>
+
+  <!-- Toast -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Supervisor Action Modal -->
+  <div class="modal-overlay" id="action-modal">
+    <div class="modal-box glass-card">
+      <button class="modal-close-btn" id="modal-close">✕</button>
+      <h3 id="modal-action-title" style="color:var(--rescue-primary);">Supervisor Action</h3>
+      <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:1rem;">
+        Add a supervisor note before confirming this action.
+      </p>
+      <div class="form-group">
+        <label for="supervisor-note">Supervisor Note <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+        <textarea
+          id="supervisor-note"
+          class="form-control"
+          rows="3"
+          placeholder="e.g. Verified report via phone, dispatching Alpha team…"
+        ></textarea>
+      </div>
+      <div class="modal-actions">
+        <button id="modal-cancel" class="btn btn-outline" style="font-size:0.85rem;">Cancel</button>
+        <button id="modal-confirm" class="btn" style="background:linear-gradient(135deg,#f59e0b,#fb923c);box-shadow:0 4px 16px rgba(245,158,11,.3);font-size:0.85rem;">
+          ✅ Confirm Action
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <main class="container rescue-page">
+
+    <!-- Module Header -->
+    <section class="module-header">
+      <a href="../../index.html" class="back-link">← Back to Portal</a>
+      <div class="module-title-row">
+        <h1>🖥 Rescue Control Room</h1>
+        <span class="module-badge rescue">Rescue &amp; Emergency</span>
+      </div>
+      <p style="color:var(--text-secondary);font-size:0.95rem;margin-top:0.5rem;">
+        Supervisor dashboard. Review all rescue emergencies, approve dispatches, modify assignments, or close cases.
+      </p>
+    </section>
+
+    <!-- Quick nav links -->
+    <div style="display:flex;gap:0.75rem;margin-bottom:2rem;flex-wrap:wrap;">
+      <a href="index.html" class="btn" style="background:linear-gradient(135deg,#f59e0b,#fb923c);box-shadow:0 4px 16px rgba(245,158,11,.25);font-size:0.82rem;padding:.45rem 1rem;">
+        🚨 Report New Emergency
+      </a>
+      <a href="track.html" class="btn btn-outline" style="font-size:0.82rem;padding:.45rem 1rem;">📡 Track Emergency</a>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="control-stats-row" id="control-stats">
+      <!-- Populated by JS -->
+    </div>
+
+    <!-- Decision Policy Legend -->
+    <div class="glass-card" style="margin-bottom:1.75rem;background:rgba(245,158,11,0.04);border-color:rgba(245,158,11,0.12);">
+      <div style="display:flex;align-items:flex-start;gap:2rem;flex-wrap:wrap;">
+        <div>
+          <h4 style="font-size:0.8rem;font-weight:700;color:var(--rescue-primary);margin-bottom:0.5rem;">🤖 AI Decision Policy</h4>
+          <div style="display:flex;flex-direction:column;gap:0.4rem;font-size:0.78rem;color:var(--text-secondary);">
+            <span><span style="color:#f9a8d4;font-weight:700;">🔴 Critical</span> → Auto-Dispatched immediately. No supervisor action required.</span>
+            <span><span style="color:#fca5a5;font-weight:700;">🟠 High</span> → Pending Supervisor Approval. Use Approve / Modify / Close.</span>
+            <span><span style="color:#fcd34d;font-weight:700;">🟡 Medium</span> → Pending Supervisor Approval. Use Approve / Modify / Close.</span>
+            <span><span style="color:#6ee7b7;font-weight:700;">🟢 Low</span> → Pending Review. Supervisor may approve or close.</span>
+          </div>
+        </div>
+        <div style="margin-left:auto;text-align:right;">
+          <button onclick="location.reload()" class="btn btn-outline" style="font-size:0.78rem;padding:.35rem .8rem;">🔄 Refresh</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="control-header-row">
+      <div class="rescue-section-title" style="margin-bottom:0;">🚨 Active Emergencies</div>
+      <div class="control-filter-bar">
+        <button class="filter-btn active" data-filter="all">All</button>
+        <button class="filter-btn" data-filter="critical">🔴 Critical</button>
+        <button class="filter-btn" data-filter="high">🟠 High</button>
+        <button class="filter-btn" data-filter="medium">🟡 Medium</button>
+        <button class="filter-btn" data-filter="low">🟢 Low</button>
+        <button class="filter-btn" data-filter="pending">⏳ Pending</button>
+      </div>
+    </div>
+
+    <!-- Emergencies List -->
+    <div id="control-root">
+      <!-- Populated by JS -->
+    </div>
+
+  </main>
+
+  <!-- Shared Footer -->
+  <div id="footer-placeholder"></div>
+
+  <script src="../../components/navbar.js"></script>
+  <script src="../../components/footer.js"></script>
+  <script type="module">
+    import { initControlRoom, initControlRoomModal } from '../../js/rescue.js';
+
+    // Cancel button inside modal
+    document.getElementById('modal-cancel')?.addEventListener('click', () => {
+      document.getElementById('action-modal').classList.remove('active');
+    });
+
+    initControlRoom();
+    initControlRoomModal();
+  </script>
+
+</body>
+</html>

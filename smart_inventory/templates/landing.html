@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block title %}Welcome to Smart Inventory System{% endblock %}
+
+{% block guest_content %}
+<div class="landing-container">
+    <div class="landing-header">
+        <h1>🏥 Smart Inventory System</h1>
+        <p>Digitizing medicine stock tracking and distribution for ASHA Workers and providing real-time inventory visibility to Mandal Hospitals.</p>
+    </div>
+    
+    <div class="landing-grid">
+        <!-- Card 1: ASHA Worker -->
+        <a href="{{ url_for('auth.asha_login') }}" class="login-card">
+            <div class="login-card-icon">👩‍⚕️</div>
+            <h3>ASHA Worker</h3>
+            <p>Access your village medicine register, log stock distributions, and manage available inventory levels.</p>
+        </a>
+        
+        <!-- Card 2: Mandal Hospital -->
+        <a href="{{ url_for('auth.mandal_login') }}" class="login-card">
+            <div class="login-card-icon">🏥</div>
+            <h3>Mandal Hospital</h3>
+            <p>Monitor village-wise inventories, identify low stock alerts, and review mandal-wide medicine availability statistics.</p>
+        </a>
+    </div>
+</div>
+{% endblock %}
