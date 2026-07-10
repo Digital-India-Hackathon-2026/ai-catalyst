@@ -73,6 +73,25 @@
           </div>
         </div>
 
+        <!-- Contact details -->
+        <div class="glass-card" style="padding: 1.5rem;">
+          <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; color: var(--text-secondary);"><i class="fa-solid fa-address-card"></i> Contact Information</h4>
+          <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.85rem;">
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-muted);">Email:</span>
+              <span style="font-weight: 600; color: #fff; font-size: 0.8rem; word-break: break-all;" id="emp-email">-</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-muted);">Phone:</span>
+              <span style="font-weight: 600; color: #fff;" id="emp-phone">-</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; flex-direction: column;">
+              <span style="color: var(--text-muted); margin-bottom: 0.25rem;">Office Location:</span>
+              <span style="font-weight: 600; color: #fff;" id="emp-location">Mandal Office, Sec 4</span>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- Right side: Performance graphs & Tasks lists -->
@@ -116,6 +135,28 @@
             <div class="chart-container">
               <canvas id="chart-monthly-ratings"></canvas>
             </div>
+          </div>
+        </div>
+
+        <!-- Active Tasks list -->
+        <div class="glass-card">
+          <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; color: var(--text-secondary);"><i class="fa-solid fa-list-check"></i> Active Operations Ledger</h4>
+          <div class="table-wrapper" style="margin-bottom: 0;">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Category</th>
+                  <th>Description</th>
+                  <th>Priority</th>
+                  <th>Deadline</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="active-ledger-body">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -181,6 +222,10 @@
         document.getElementById("emp-specialization").textContent = emp.specialization;
         document.getElementById("emp-attendance").textContent = `${emp.attendance_percentage}%`;
         
+        // Contact details population
+        document.getElementById("emp-email").textContent = `${emp.username}@govconnect.nic.in`;
+        document.getElementById("emp-phone").textContent = `+91 98480 22${10 + emp.id}`;
+        
         const statusBadge = document.getElementById("emp-status");
         statusBadge.textContent = emp.status;
         statusBadge.className = `badge-status ${emp.status.toLowerCase().replace(' ', '')}`;
@@ -189,6 +234,29 @@
         document.getElementById("stat-avg-time").textContent = `${emp.avg_resolution_time.toFixed(1)} hours`;
         document.getElementById("stat-efficiency").textContent = `${emp.efficiency_percentage}%`;
         document.getElementById("stat-active-workload").textContent = `${emp.current_tasks.length} active`;
+        
+        // Render active tasks table
+        const tbodyActive = document.getElementById("active-ledger-body");
+        tbodyActive.innerHTML = "";
+        
+        if (emp.current_tasks.length === 0) {
+          tbodyActive.innerHTML = `<tr><td colspan="6" class="empty-state"><i class="fa-solid fa-circle-check"></i> No active tasks assigned.</td></tr>`;
+        } else {
+          emp.current_tasks.forEach(t => {
+            const dateStr = new Date(t.deadline).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            
+            tbodyActive.innerHTML += `
+              <tr>
+                <td><strong>#${t.id}</strong></td>
+                <td>${t.category}</td>
+                <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${t.description}</td>
+                <td><span class="badge-status ${t.priority.toLowerCase()}">${t.priority}</span></td>
+                <td>${dateStr}</td>
+                <td><span class="badge-status ${t.status.toLowerCase().replace(' ', '')}">${t.status}</span></td>
+              </tr>
+            `;
+          });
+        }
         
         // Render completed tasks table
         const tbody = document.getElementById("completed-ledger-body");

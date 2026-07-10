@@ -36,6 +36,12 @@ function showAuth() {
   document.getElementById("login-form").reset();
   document.getElementById("register-form").reset();
   
+  // Reset password group display and requirements (default Citizen selected)
+  document.getElementById("login-password-group").style.display = "none";
+  document.getElementById("login-password").required = false;
+  document.getElementById("reg-password-group").style.display = "none";
+  document.getElementById("reg-password").required = false;
+  
   toggleAuthView("login");
 }
 
@@ -59,12 +65,40 @@ function setupAuthEvents() {
     e.preventDefault();
     toggleAuthView("login");
   });
+
+  // Toggle password fields based on role selection
+  document.getElementById("login-role").addEventListener("change", (e) => {
+    const passwordGroup = document.getElementById("login-password-group");
+    const passwordInput = document.getElementById("login-password");
+    if (e.target.value === "Citizen") {
+      passwordGroup.style.display = "none";
+      passwordInput.required = false;
+      passwordInput.value = "";
+    } else {
+      passwordGroup.style.display = "block";
+      passwordInput.required = true;
+    }
+  });
+
+  document.getElementById("reg-role").addEventListener("change", (e) => {
+    const passwordGroup = document.getElementById("reg-password-group");
+    const passwordInput = document.getElementById("reg-password");
+    if (e.target.value === "Citizen") {
+      passwordGroup.style.display = "none";
+      passwordInput.required = false;
+      passwordInput.value = "";
+    } else {
+      passwordGroup.style.display = "block";
+      passwordInput.required = true;
+    }
+  });
   
   // Login Submit
   document.getElementById("login-form").addEventListener("submit", async (e) => {
     e.preventDefault();
+    const role = document.getElementById("login-role").value;
     const username = document.getElementById("login-username").value.trim();
-    const password = document.getElementById("login-password").value;
+    const password = role === "Citizen" ? "" : document.getElementById("login-password").value;
     
     try {
       const response = await fetch(`${API_BASE}/api/civic/auth/login`, {
@@ -90,10 +124,10 @@ function setupAuthEvents() {
   // Register Submit
   document.getElementById("register-form").addEventListener("submit", async (e) => {
     e.preventDefault();
+    const role = document.getElementById("reg-role").value;
     const full_name = document.getElementById("reg-name").value.trim();
     const username = document.getElementById("reg-username").value.trim();
-    const password = document.getElementById("reg-password").value;
-    const role = document.getElementById("reg-role").value;
+    const password = role === "Citizen" ? "" : document.getElementById("reg-password").value;
     
     try {
       const response = await fetch(`${API_BASE}/api/civic/auth/register`, {
@@ -278,7 +312,7 @@ function switchView(viewId) {
 function initSubmissionMap() {
   if (submitMap) return; // already initialized
   
-  // Default to Hyderabad center
+  // Default to Hyderabad center (fallback only — replaced by live GPS below)
   const defaultLat = 17.3850;
   const defaultLng = 78.4867;
   
@@ -287,7 +321,7 @@ function initSubmissionMap() {
     attribution: '© OpenStreetMap'
   }).addTo(submitMap);
   
-  // Set default coordinates
+  // Set default coordinates (temporary — overridden by auto-detect below)
   document.getElementById("comp-lat").value = defaultLat;
   document.getElementById("comp-lng").value = defaultLng;
   document.getElementById("coordinates-display").innerHTML = `Lat: ${defaultLat}, Lng: ${defaultLng}`;
@@ -303,8 +337,23 @@ function initSubmissionMap() {
     submitMarker.setLatLng(e.latlng);
     updateCoords(e.latlng.lat, e.latlng.lng);
   });
+
+  // Auto-detect user's live GPS location on map load
+  // This immediately replaces the hardcoded default with the user's real position
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      submitMap.setView([lat, lng], 15);
+      submitMarker.setLatLng([lat, lng]);
+      updateCoords(lat, lng);
+    }, () => {
+      // Silently fall back to default if auto-detect fails on load
+      console.log("Auto-detect on load failed — using default map center.");
+    }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+  }
   
-  // Geolocation trigger
+  // Manual geolocation trigger (Auto-Detect button)
   document.getElementById("btn-geolocation").addEventListener("click", () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((pos) => {
@@ -315,7 +364,7 @@ function initSubmissionMap() {
         updateCoords(lat, lng);
       }, () => {
         alert("Geolocation retrieval failed. Please click coordinates manually.");
-      });
+      }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
     } else {
       alert("Geolocation is not supported by your browser.");
     }
@@ -354,66 +403,329 @@ function initSubmissionMap() {
   descInput.addEventListener("input", queryAIHeuristic);
   categoryInput.addEventListener("change", queryAIHeuristic);
 
-  // File image input Base64 parsing
+  // --- CAMERA AND UPLOAD FUNCTIONALITY ---
+  let tempImageBase64 = null;
+  let confirmedImageBase64 = null;
+  let localStream = null;
+
   const fileInput = document.getElementById("comp-file-input");
-  const uploadTrigger = document.getElementById("image-upload-trigger");
+  const cameraInput = document.getElementById("comp-camera-input");
   const uploadPrompt = document.getElementById("upload-prompt");
   const uploadPreview = document.getElementById("upload-preview-img");
-  
-  uploadTrigger.addEventListener("click", () => fileInput.click());
-  
+
+  const showImageError = (msg) => {
+    const errorSpan = document.getElementById("image-validation-msg");
+    errorSpan.textContent = ` (${msg})`;
+    errorSpan.style.display = "inline";
+    
+    // Reset image state
+    tempImageBase64 = null;
+    confirmedImageBase64 = null;
+    uploadPreview.style.display = "none";
+    uploadPrompt.style.display = "block";
+    document.getElementById("image-action-controls").style.display = "none";
+    document.getElementById("image-status-message").style.display = "none";
+  };
+
+  const hideImageError = () => {
+    document.getElementById("image-validation-msg").style.display = "none";
+  };
+
+  const setTempImage = (dataUrl) => {
+    tempImageBase64 = dataUrl;
+    confirmedImageBase64 = null; // reset confirmed state until they click Confirm
+    
+    uploadPreview.src = dataUrl;
+    uploadPreview.style.display = "block";
+    uploadPrompt.style.display = "none";
+    
+    // Show action controls (Confirm / Remove)
+    document.getElementById("image-action-controls").style.display = "flex";
+    document.getElementById("image-status-message").style.display = "none";
+    hideImageError();
+  };
+
+  const validateAndLoadImage = (file) => {
+    // 1. Validate format
+    const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    if (!validTypes.includes(file.type)) {
+      showImageError("Unsupported format. Please upload JPG, PNG or WEBP.");
+      return;
+    }
+    // 2. Validate size (10 MB limit)
+    const maxSize = 10 * 1024 * 1024; // 10 MB
+    if (file.size > maxSize) {
+      showImageError("Image size exceeds 10 MB.");
+      return;
+    }
+
+    hideImageError();
+
+    // Read and load
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setTempImage(event.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const triggerAIAnalysis = async (dataUrl) => {
+    const descTextarea = document.getElementById("comp-desc");
+    const loadingIndicator = document.getElementById("ai-desc-loading");
+
+    // Show loading indicator while AI analyses
+    loadingIndicator.style.display = "inline";
+    descTextarea.placeholder = "Generating description...";
+    descTextarea.disabled = true;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/civic/analyze-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: dataUrl })
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        // Auto-populate description with AI-generated text
+        descTextarea.value = data.description;
+        descTextarea.placeholder = "Detail the complaint...";
+      } else {
+        // AI couldn't identify the issue — show fallback message
+        descTextarea.value = "";
+        descTextarea.placeholder = data.message || "Unable to generate an accurate description. Please enter the complaint manually.";
+      }
+    } catch (err) {
+      console.error("AI image analysis error:", err);
+      descTextarea.value = "";
+      descTextarea.placeholder = "Unable to generate an accurate description. Please enter the complaint manually.";
+    } finally {
+      // Always hide loading indicator and re-enable textarea
+      loadingIndicator.style.display = "none";
+      descTextarea.disabled = false;
+    }
+  };
+
+  const confirmComplaintImage = () => {
+    if (!tempImageBase64) return;
+    confirmedImageBase64 = tempImageBase64;
+    
+    document.getElementById("image-action-controls").style.display = "none";
+    document.getElementById("image-status-message").style.display = "block";
+    hideImageError();
+    
+    // Trigger AI analysis automatically
+    triggerAIAnalysis(confirmedImageBase64);
+  };
+
+  // Webcam modal stream methods for desktop
+  const openWebcam = async () => {
+    const modal = document.getElementById("camera-modal");
+    const video = document.getElementById("webcam-video");
+    const streamContainer = document.getElementById("camera-stream-container");
+    const previewContainer = document.getElementById("camera-preview-container");
+    const captureBtn = document.getElementById("btn-capture-snap");
+    const confirmBtn = document.getElementById("btn-confirm-snap");
+    const retakeBtn = document.getElementById("btn-retake-snap");
+
+    // Reset modal view
+    streamContainer.style.display = "block";
+    previewContainer.style.display = "none";
+    captureBtn.style.display = "inline-flex";
+    confirmBtn.style.display = "none";
+    retakeBtn.style.display = "none";
+    modal.style.display = "flex";
+
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" }
+      });
+      video.srcObject = localStream;
+    } catch (err) {
+      console.error("Error accessing webcam:", err);
+      alert("Could not access webcam/camera stream directly. Falling back to native file explorer/camera capture.");
+      modal.style.display = "none";
+      cameraInput.click();
+    }
+  };
+
+  const closeWebcam = () => {
+    const modal = document.getElementById("camera-modal");
+    modal.style.display = "none";
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      localStream = null;
+    }
+    const video = document.getElementById("webcam-video");
+    video.srcObject = null;
+  };
+
+  // Bind Buttons
+  document.getElementById("btn-take-photo").addEventListener("click", () => {
+    const isMobile = /Mobi|Android|iPhone|iPad|Macintosh/i.test(navigator.userAgent) && 'ontouchstart' in window;
+    if (isMobile) {
+      cameraInput.click();
+    } else {
+      openWebcam();
+    }
+  });
+
+  document.getElementById("btn-upload-photo").addEventListener("click", () => {
+    fileInput.click();
+  });
+
   fileInput.addEventListener("change", (e) => {
     const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        uploadPreview.src = event.target.result;
-        uploadPreview.style.display = "block";
-        uploadPrompt.style.display = "none";
-      };
-      reader.readAsDataURL(file);
-    }
+    if (file) validateAndLoadImage(file);
+  });
+
+  cameraInput.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) validateAndLoadImage(file);
+  });
+
+  document.getElementById("btn-confirm-image").addEventListener("click", () => {
+    confirmComplaintImage();
+  });
+
+  document.getElementById("btn-remove-image").addEventListener("click", () => {
+    tempImageBase64 = null;
+    confirmedImageBase64 = null;
+    
+    uploadPreview.src = "";
+    uploadPreview.style.display = "none";
+    uploadPrompt.style.display = "block";
+    
+    document.getElementById("image-action-controls").style.display = "none";
+    document.getElementById("image-status-message").style.display = "none";
+    
+    fileInput.value = "";
+    cameraInput.value = "";
+    hideImageError();
+  });
+
+  // Modal actions
+  document.getElementById("btn-close-camera-modal").addEventListener("click", () => {
+    closeWebcam();
+  });
+
+  document.getElementById("btn-capture-snap").addEventListener("click", () => {
+    const video = document.getElementById("webcam-video");
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    const dataUrl = canvas.toDataURL("image/jpeg");
+    const previewImg = document.getElementById("webcam-preview-img");
+    previewImg.src = dataUrl;
+    
+    document.getElementById("camera-stream-container").style.display = "none";
+    document.getElementById("camera-preview-container").style.display = "block";
+    
+    document.getElementById("btn-capture-snap").style.display = "none";
+    document.getElementById("btn-confirm-snap").style.display = "inline-flex";
+    document.getElementById("btn-retake-snap").style.display = "inline-flex";
+  });
+
+  document.getElementById("btn-retake-snap").addEventListener("click", () => {
+    document.getElementById("camera-stream-container").style.display = "block";
+    document.getElementById("camera-preview-container").style.display = "none";
+    
+    document.getElementById("btn-capture-snap").style.display = "inline-flex";
+    document.getElementById("btn-confirm-snap").style.display = "none";
+    document.getElementById("btn-retake-snap").style.display = "none";
+  });
+
+  document.getElementById("btn-confirm-snap").addEventListener("click", () => {
+    const previewImg = document.getElementById("webcam-preview-img");
+    setTempImage(previewImg.src);
+    closeWebcam();
+    confirmComplaintImage();
   });
 
   // Form Submit Action
   document.getElementById("complaint-form").onsubmit = async (e) => {
     e.preventDefault();
-    
+
+    // Prevent submission if no image is confirmed
+    if (!confirmedImageBase64) {
+      showImageError("Please select/capture an image and click Confirm Photo.");
+      alert("A confirmed image is required to submit a complaint.");
+      return;
+    }
+
     const title = document.getElementById("comp-title").value.trim();
     const category = document.getElementById("comp-category").value;
     const description = document.getElementById("comp-desc").value.trim();
     const priority = document.getElementById("comp-priority").value;
-    const lat = parseFloat(document.getElementById("comp-lat").value);
-    const lng = parseFloat(document.getElementById("comp-lng").value);
-    const image_path = uploadPreview.src || null;
-    
-    try {
-      const res = await fetch(`${API_BASE}/api/civic/complaints`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title, category, description, priority, lat, lng, image_path,
-          citizen_id: currentUser.id
-        })
-      });
-      
-      const data = await res.json();
-      if (res.ok) {
-        alert("Grievance submitted successfully to Municipal Office!");
-        // Reset form & view history
-        document.getElementById("complaint-form").reset();
-        uploadPreview.style.display = "none";
-        uploadPrompt.style.display = "block";
-        uploadPreview.removeAttribute('src');
-        switchView("complaints-list");
-        loadComplaintsList();
-      } else {
-        alert(data.error || "Submission failed");
+    const image_path = confirmedImageBase64;
+
+    // --- AUTO GPS LOCATION CAPTURE ---
+    // Wraps the existing submission in a geolocation promise.
+    // On success: GPS coords override map-picked values before submit.
+    // On denial: block submission and show a message.
+    const captureLocationAndSubmit = async (lat, lng) => {
+      // Update hidden inputs and display with captured GPS coordinates
+      document.getElementById("comp-lat").value = lat;
+      document.getElementById("comp-lng").value = lng;
+      updateCoords(lat, lng);
+
+      try {
+        const res = await fetch(`${API_BASE}/api/civic/complaints`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title, category, description, priority, lat, lng, image_path,
+            citizen_id: currentUser.id
+          })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          alert("Grievance submitted successfully to Municipal Office!");
+          // Reset form & view history
+          document.getElementById("complaint-form").reset();
+          uploadPreview.style.display = "none";
+          uploadPrompt.style.display = "block";
+          uploadPreview.removeAttribute('src');
+          tempImageBase64 = null;
+          confirmedImageBase64 = null;
+          document.getElementById("image-action-controls").style.display = "none";
+          document.getElementById("image-status-message").style.display = "none";
+          fileInput.value = "";
+          cameraInput.value = "";
+          switchView("complaints-list");
+          loadComplaintsList();
+        } else {
+          alert(data.error || "Submission failed");
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Error sending request to server.");
       }
-    } catch (err) {
-      console.error(err);
-      alert("Error sending request to server.");
+    };
+
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser.");
+      return;
     }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        // Permission granted — capture GPS coords
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        captureLocationAndSubmit(lat, lng);
+      },
+      () => {
+        // Permission denied or unavailable — block submission
+        alert("Location access is required to submit a complaint.");
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
   };
 }
 
@@ -515,7 +827,7 @@ async function loadComplaintsList() {
       
       if (currentUser.role === "Citizen") {
         let actionBtn = `<button class="btn btn-outline" onclick="openTracker(${comp.id})" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;"><i class="fa-solid fa-route"></i> Track</button>`;
-        if (comp.status === "Resolved") {
+        if (comp.status === "Resolved" || comp.status === "Verified") {
           actionBtn += ` <button class="btn" onclick="openRatingModal(${comp.id})" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; background-color: var(--color-success);"><i class="fa-solid fa-star"></i> Rate & Close</button>`;
         }
         
@@ -532,6 +844,8 @@ async function loadComplaintsList() {
         let assignBtn = "";
         if (comp.status === "Submitted" || comp.status === "AI Categorized" || comp.status === "Pending Admin Review") {
           assignBtn = `<button class="btn" onclick="openAssignmentModal(${comp.id})" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;"><i class="fa-solid fa-user-plus"></i> Allocate</button>`;
+        } else if (comp.status === "Resolved") {
+          assignBtn = `<button class="btn" onclick="verifyComplaint(${comp.id})" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; background-color: var(--color-success);"><i class="fa-solid fa-certificate"></i> Verify</button>`;
         } else {
           assignBtn = `<span style="font-size: 0.75rem; color: var(--text-muted);">Assigned: <a href="#" onclick="viewEmployeeProfile(${comp.assigned_employee_id})" style="color:var(--color-civic); text-decoration:none;">${comp.employee_name || 'Officer'}</a></span>`;
         }
@@ -699,10 +1013,17 @@ async function loadAdminDashboard() {
       </div>
       <div class="glass-card analytics-card warning">
         <div class="info">
-          <h5>Pending</h5>
+          <h5>Pending Review</h5>
           <div class="value">${data.pending_complaints}</div>
         </div>
         <div class="icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+      </div>
+      <div class="glass-card analytics-card normal">
+        <div class="info">
+          <h5>Assigned Tasks</h5>
+          <div class="value">${data.assigned_complaints}</div>
+        </div>
+        <div class="icon"><i class="fa-solid fa-user-check"></i></div>
       </div>
       <div class="glass-card analytics-card normal">
         <div class="info">
@@ -714,23 +1035,58 @@ async function loadAdminDashboard() {
       <div class="glass-card analytics-card success">
         <div class="info">
           <h5>Resolved</h5>
-          <div class="value">${data.resolved + data.closed}</div>
+          <div class="value">${data.resolved}</div>
         </div>
         <div class="icon"><i class="fa-solid fa-circle-check"></i></div>
       </div>
+      <div class="glass-card analytics-card success">
+        <div class="info">
+          <h5>Closed</h5>
+          <div class="value">${data.closed}</div>
+        </div>
+        <div class="icon"><i class="fa-solid fa-box-archive"></i></div>
+      </div>
+      <div class="glass-card analytics-card normal">
+        <div class="info">
+          <h5>Today's Received</h5>
+          <div class="value">${data.today_complaints}</div>
+        </div>
+        <div class="icon"><i class="fa-solid fa-calendar-day"></i></div>
+      </div>
+      <div class="glass-card analytics-card warning">
+        <div class="info">
+          <h5>High Priority</h5>
+          <div class="value">${data.high_priority_complaints}</div>
+        </div>
+        <div class="icon"><i class="fa-solid fa-hourglass-half"></i></div>
+      </div>
       <div class="glass-card analytics-card danger">
         <div class="info">
-          <h5>Emergency (SLA Risk)</h5>
+          <h5>Emergency Tasks</h5>
           <div class="value">${data.emergency_complaints}</div>
         </div>
         <div class="icon"><i class="fa-solid fa-bell"></i></div>
       </div>
       <div class="glass-card analytics-card success">
         <div class="info">
-          <h5>Active Officers</h5>
+          <h5>Available Officers</h5>
           <div class="value">${data.employee_availability}</div>
         </div>
         <div class="icon"><i class="fa-solid fa-users-gear"></i></div>
+      </div>
+      <div class="glass-card analytics-card normal">
+        <div class="info">
+          <h5>Avg Resolution Time</h5>
+          <div class="value">${data.average_resolution_time}</div>
+        </div>
+        <div class="icon"><i class="fa-solid fa-stopwatch"></i></div>
+      </div>
+      <div class="glass-card analytics-card danger">
+        <div class="info">
+          <h5>SLA Violations</h5>
+          <div class="value">${data.sla_violations}</div>
+        </div>
+        <div class="icon"><i class="fa-solid fa-skull-crossbones"></i></div>
       </div>
     `;
     
@@ -997,31 +1353,39 @@ window.openAssignmentModal = async function(cid) {
       const emp = rec.employee;
       const row = document.createElement("div");
       row.className = "employee-comparison-card glass-card";
+      row.style = "display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem; margin-bottom: 1rem; width: 100%; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; background: rgba(255, 255, 255, 0.015);";
+      
       row.innerHTML = `
-        <div class="employee-avatar-col">
-          <img src="${emp.profile_photo || 'https://via.placeholder.com/150'}" alt="${emp.full_name}">
-        </div>
-        <div class="employee-info-col">
-          <h5>${emp.full_name}</h5>
-          <p>${emp.designation}</p>
-          <span style="font-size:0.7rem; color:var(--text-muted);"><i class="fa-solid fa-circle" style="color: ${emp.status==='Available'?'#10b981':'#ef4444'}; font-size:0.6rem;"></i> ${emp.status}</span>
-        </div>
-        <div class="employee-stats-col">
-          <div class="stat-box">
-            <span>Workload</span>
-            <strong>${emp.current_workload} active</strong>
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 1rem;">
+          <div style="display: flex; gap: 1rem; align-items: center;">
+            <img src="${emp.profile_photo || 'https://via.placeholder.com/150'}" alt="${emp.full_name}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255, 255, 255, 0.1);">
+            <div>
+              <h5 style="font-size: 0.95rem; font-weight: 700; margin: 0; color: #fff;">${emp.full_name} <span style="font-size: 0.75rem; color: var(--text-muted);">(${emp.employee_id})</span></h5>
+              <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0.15rem 0 0 0;">${emp.designation} | Dept: <strong>${emp.department}</strong></p>
+            </div>
           </div>
-          <div class="stat-box">
-            <span>Rating</span>
-            <strong>${emp.rating.toFixed(1)} / 5</strong>
-          </div>
-          <div class="stat-box">
-            <span>Distance</span>
-            <strong>${rec.distance_km} km</strong>
+          <div>
+            <button class="btn btn-outline" onclick="executeAssignment(${cid}, ${emp.id}, true)" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; border-color: var(--color-warning); color: #fff;"><i class="fa-solid fa-user-pen"></i> Assign Override</button>
           </div>
         </div>
-        <div>
-          <button class="btn btn-outline" onclick="executeAssignment(${cid}, ${emp.id}, true)" style="padding: 0.35rem 0.5rem; font-size: 0.75rem; border-color:var(--color-warning); color:#fff;">Assign Override</button>
+
+        <div class="emp-params-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 0.75rem; font-size: 0.75rem; width: 100%;">
+          <div><span style="color: var(--text-muted);">Experience:</span> <strong style="color: #fff;">${emp.experience_years} Years</strong></div>
+          <div style="grid-column: span 2;"><span style="color: var(--text-muted);">Specialization:</span> <strong style="color: #fff;">${emp.specialization}</strong></div>
+          <div><span style="color: var(--text-muted);">Attendance:</span> <strong style="color: var(--color-success);">${emp.attendance_percentage}%</strong></div>
+          
+          <div><span style="color: var(--text-muted);">Efficiency:</span> <strong style="color: var(--color-primary);">${emp.efficiency_percentage}%</strong></div>
+          <div><span style="color: var(--text-muted);">Rating:</span> <strong style="color: #fbbf24;"><i class="fa-solid fa-star"></i> ${emp.rating.toFixed(1)}/5</strong></div>
+          <div><span style="color: var(--text-muted);">Avg Resol. Time:</span> <strong style="color: #fff;">${emp.avg_resolution_time.toFixed(1)} hrs</strong></div>
+          <div><span style="color: var(--text-muted);">Current Workload:</span> <strong style="color: var(--color-warning);">${emp.current_workload} active</strong></div>
+          
+          <div><span style="color: var(--text-muted);">Completed:</span> <strong style="color: var(--color-success);">${emp.total_completed} jobs</strong></div>
+          <div><span style="color: var(--text-muted);">Pending:</span> <strong style="color: var(--color-warning);">${emp.total_pending} jobs</strong></div>
+          <div><span style="color: var(--text-muted);">Availability:</span> <strong style="color: ${emp.status==='Available'?'var(--color-success)':'var(--color-danger)'};">${emp.status}</strong></div>
+          <div><span style="color: var(--text-muted);">Leave Status:</span> <strong style="color: ${emp.leave_status==='Active'?'var(--color-success)':'var(--color-danger)'};">${emp.leave_status}</strong></div>
+          
+          <div style="grid-column: span 2;"><span style="color: var(--text-muted);">Current Location:</span> <strong style="font-family: monospace; color: #fff;">(${emp.lat.toFixed(4)}, ${emp.lng.toFixed(4)})</strong></div>
+          <div style="grid-column: span 2;"><span style="color: var(--text-muted);">Distance:</span> <strong style="color: var(--color-primary);">${rec.distance_km} km away</strong></div>
         </div>
       `;
       empList.appendChild(row);
@@ -1240,6 +1604,31 @@ window.openTracker = function(cid) {
 
 window.viewEmployeeProfile = function(empId) {
   window.open(`employee-profile.html?id=${empId}`, '_blank');
+};
+
+window.verifyComplaint = async function(cid) {
+  if (!confirm("Are you sure you want to verify the resolved work for this complaint?")) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/civic/complaints/${cid}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'Verified',
+        actor: currentUser.full_name
+      })
+    });
+    if (res.ok) {
+      alert("Complaint marked as VERIFIED!");
+      loadComplaintsList();
+      if (document.getElementById("view-admin-dashboard").style.display === "block") {
+        loadAdminDashboard();
+      }
+    } else {
+      alert("Verification update failed.");
+    }
+  } catch (err) {
+    console.error(err);
+  }
 };
 
 
