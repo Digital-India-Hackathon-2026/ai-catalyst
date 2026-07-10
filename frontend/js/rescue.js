@@ -927,8 +927,6 @@ function renderResultPage(e, root) {
   }
 }
 
-}
-
 
 
 function getPolicyExplanation(severity, status) {
