@@ -1,0 +1,26 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+web_modules/
+
+# Python compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# Production build outputs
+dist/
+tmp/
+out/
+build/
+
+# Local env files
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
