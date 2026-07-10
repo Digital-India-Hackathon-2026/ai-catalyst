@@ -178,6 +178,15 @@ def init_db():
         cursor.execute("SELECT ai_analysis_json FROM rescue_emergencies LIMIT 1")
     except sqlite3.OperationalError:
         cursor.execute("ALTER TABLE rescue_emergencies ADD COLUMN ai_analysis_json TEXT")
+    try:
+        cursor.execute("SELECT team_lat FROM rescue_emergencies LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE rescue_emergencies ADD COLUMN team_lat REAL")
+    try:
+        cursor.execute("SELECT team_lng FROM rescue_emergencies LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE rescue_emergencies ADD COLUMN team_lng REAL")
+
 
 
     # 7. Rescue Audit Logs Table

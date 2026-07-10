@@ -7,14 +7,33 @@ const API_BASE = 'http://127.0.0.1:5000';
 
 // ─── Module Scope Geolocation & Team Constants ────────────
 export const TEAM_BASES = {
+  // Category fallbacks
   'Fire Response Unit':             { lat: 17.4374, lng: 78.4482, name: 'Ameerpet Fire Station Unit', icon: '🚒' },
   'Flood Rescue (NDRF)':            { lat: 17.4399, lng: 78.5020, name: 'Secunderabad NDRF Battalion', icon: '🚤' },
   'SDRF Structural Response Team':  { lat: 17.4265, lng: 78.4124, name: 'Jubilee Hills SDRF Team', icon: '🚜' },
   'Hazmat Response Unit':           { lat: 17.4483, lng: 78.3741, name: 'Gachibowli Hazmat Station', icon: '🚐' },
   'Emergency Response Team':        { lat: 17.4486, lng: 78.3908, name: 'Madhapur Patrol Unit', icon: '🚑' },
   'Electrical Emergency Unit':      { lat: 17.4447, lng: 78.4664, name: 'Begumpet Power Grid Response', icon: '🚐' },
-  'Civic Emergency Team':           { lat: 17.4699, lng: 78.3678, name: 'Kondapur Municipal Crew', icon: '🚛' }
+  'Civic Emergency Team':           { lat: 17.4699, lng: 78.3678, name: 'Kondapur Municipal Crew', icon: '🚛' },
+
+  // Sub-units
+  'Fire Unit 1':                    { lat: 17.4374, lng: 78.4482, name: 'Ameerpet Fire Station Base', icon: '🚒' },
+  'Fire Unit 2':                    { lat: 17.4420, lng: 78.5012, name: 'Secunderabad Fire Station Base', icon: '🚒' },
+  'Fire Unit 3':                    { lat: 17.4486, lng: 78.3908, name: 'Madhapur Fire Station Base', icon: '🚒' },
+  'NDRF Unit A':                    { lat: 17.4399, lng: 78.5020, name: 'Secunderabad NDRF Battalion Base', icon: '🚤' },
+  'NDRF Unit B':                    { lat: 17.4483, lng: 78.3741, name: 'Gachibowli NDRF Battalion Base', icon: '🚤' },
+  'SDRF Unit 1':                    { lat: 17.4265, lng: 78.4124, name: 'Jubilee Hills SDRF Base', icon: '🚜' },
+  'SDRF Unit 2':                    { lat: 17.4447, lng: 78.4664, name: 'Begumpet SDRF Base', icon: '🚜' },
+  'Hazmat Unit Alpha':              { lat: 17.4483, lng: 78.3741, name: 'Gachibowli Hazmat Station Base', icon: '🚐' },
+  'Hazmat Unit Beta':               { lat: 17.4486, lng: 78.3908, name: 'Madhapur Hazmat Station Base', icon: '🚐' },
+  'ERT Unit 1':                     { lat: 17.4486, lng: 78.3908, name: 'Madhapur ERT Base', icon: '🚑' },
+  'ERT Unit 2':                     { lat: 17.4447, lng: 78.4664, name: 'Begumpet ERT Base', icon: '🚑' },
+  'EE Unit A':                      { lat: 17.4447, lng: 78.4664, name: 'Begumpet Power Grid Base', icon: '🚐' },
+  'EE Unit B':                      { lat: 17.4699, lng: 78.3678, name: 'Kondapur Power Grid Base', icon: '🚐' },
+  'Civic Crew 1':                   { lat: 17.4699, lng: 78.3678, name: 'Kondapur Municipal Base', icon: '🚛' },
+  'Civic Crew 2':                   { lat: 17.4265, lng: 78.4124, name: 'Jubilee Hills Municipal Base', icon: '🚛' }
 };
+
 
 export const STATUS_MAPPING = {
   'Complaint Received': 0,
@@ -820,13 +839,22 @@ function renderResultPage(e, root) {
   // Render Map with Live Vehicle Tracking
   if (e.lat && e.lng) {
     const assignedUnit = e.nearest_rescue_team || e.recommended_team;
-    const teamBase = TEAM_BASES[assignedUnit] || { lat: 17.3850, lng: 78.4867, name: 'Central Command Base', icon: '🚒' };
+    const teamBase = TEAM_BASES[assignedUnit] || TEAM_BASES[e.recommended_team] || { lat: 17.3850, lng: 78.4867, name: 'Central Command Base', icon: '🚒' };
     const incidentPos = { lat: parseFloat(e.lat), lng: parseFloat(e.lng) };
     const statusIndex = STATUS_MAPPING[e.status] ?? 0;
 
     let teamPos = { ...teamBase };
     let trackerStatus = '';
     let progressFraction = 0;
+    let isRealGPS = false;
+
+    if (e.team_lat && e.team_lng && statusIndex >= 2 && statusIndex < 7) {
+      teamPos = { lat: parseFloat(e.team_lat), lng: parseFloat(e.team_lng) };
+      isRealGPS = true;
+      const totalD = haversineKm(teamBase, incidentPos);
+      const coveredD = haversineKm(teamBase, teamPos);
+      progressFraction = totalD > 0 ? Math.min(coveredD / totalD, 0.95) : 0.5;
+    }
 
     if (statusIndex <= 1) {
       teamPos = { ...teamBase };
@@ -835,14 +863,16 @@ function renderResultPage(e, root) {
       teamPos = { ...teamBase };
       trackerStatus = `🏢 ${assignedUnit} — ${e.status} at ${teamBase.name}`;
     } else if (statusIndex === 4) {
-      const updatedAt = e.updated_at ? new Date(e.updated_at) : new Date();
-      const etaMs = (e.response_time_minutes || 15) * 60 * 1000;
-      const elapsedMs = Date.now() - updatedAt.getTime();
-      progressFraction = Math.min(elapsedMs / etaMs, 0.92);
-      teamPos = lerpPos(teamBase, incidentPos, progressFraction);
+      if (!isRealGPS) {
+        const updatedAt = e.updated_at ? new Date(e.updated_at) : new Date();
+        const etaMs = (e.response_time_minutes || 15) * 60 * 1000;
+        const elapsedMs = Date.now() - updatedAt.getTime();
+        progressFraction = Math.min(elapsedMs / etaMs, 0.92);
+        teamPos = lerpPos(teamBase, incidentPos, progressFraction);
+      }
       const distLeft = haversineKm(teamPos, incidentPos);
       const pct = Math.round(progressFraction * 100);
-      trackerStatus = `🚨 ${teamBase.icon} En Route — ${distLeft.toFixed(1)} km away (${pct}% of journey)`;
+      trackerStatus = `🚨 ${teamBase.icon} En Route — ${distLeft.toFixed(1)} km away (${pct}% of journey)${isRealGPS ? ' (Live GPS)' : ''}`;
     } else if (statusIndex === 5) {
       teamPos = { ...incidentPos };
       trackerStatus = `📍 ${teamBase.icon} Arrived at scene — ${e.status}`;
@@ -890,6 +920,7 @@ function renderResultPage(e, root) {
           </div>`
         });
       }
+
 
       const mapResult = await renderUnifiedMap('result-map', incidentPos, 13, markers);
 
@@ -1086,35 +1117,45 @@ function renderTrackingPage(data, root) {
 
   // Team Tracking Simulation on Map — always show map, use team base as fallback if GPS missing
   {
-    const teamBase = TEAM_BASES[e.recommended_team] || { lat: 17.3850, lng: 78.4867, name: 'Central Command Base', icon: '🚒' };
+    const assignedUnit = e.nearest_rescue_team || e.recommended_team;
+    const teamBase = TEAM_BASES[assignedUnit] || TEAM_BASES[e.recommended_team] || { lat: 17.3850, lng: 78.4867, name: 'Central Command Base', icon: '🚒' };
     const incidentPos = (e.lat && e.lng)
       ? { lat: parseFloat(e.lat), lng: parseFloat(e.lng) }
       : { lat: teamBase.lat + 0.005, lng: teamBase.lng + 0.005 };
 
     const statusIndex = current_step_index;
 
-    // ── Compute vehicle position based on time elapsed ────────
+    // ── Compute vehicle position based on time elapsed or live GPS ──
     let teamPos = { ...teamBase };
     let trackerStatus = '';
     let progressFraction = 0;
+    let isRealGPS = false;
+
+    if (e.team_lat && e.team_lng && statusIndex >= 2 && statusIndex < 7) {
+      teamPos = { lat: parseFloat(e.team_lat), lng: parseFloat(e.team_lng) };
+      isRealGPS = true;
+      const totalD = haversineKm(teamBase, incidentPos);
+      const coveredD = haversineKm(teamBase, teamPos);
+      progressFraction = totalD > 0 ? Math.min(coveredD / totalD, 0.95) : 0.5;
+    }
 
     if (statusIndex <= 1) {
       teamPos = { ...teamBase };
       trackerStatus = `⏳ Awaiting dispatch — ${e.status}`;
     } else if (statusIndex === 2 || statusIndex === 3) {
       teamPos = { ...teamBase };
-      trackerStatus = `🏢 ${e.nearest_rescue_team || e.recommended_team} — ${e.status} at ${teamBase.name}`;
+      trackerStatus = `🏢 ${assignedUnit} — ${e.status} at ${teamBase.name}`;
     } else if (statusIndex === 4) {
-      // Journey started — calculate time-based progress
-      const updatedAt = e.updated_at ? new Date(e.updated_at) : new Date();
-      const etaMs = (e.response_time_minutes || 15) * 60 * 1000;
-      const elapsedMs = Date.now() - updatedAt.getTime();
-      progressFraction = Math.min(elapsedMs / etaMs, 0.92); // cap at 92% until "Reached"
-
-      teamPos = lerpPos(teamBase, incidentPos, progressFraction);
+      if (!isRealGPS) {
+        const updatedAt = e.updated_at ? new Date(e.updated_at) : new Date();
+        const etaMs = (e.response_time_minutes || 15) * 60 * 1000;
+        const elapsedMs = Date.now() - updatedAt.getTime();
+        progressFraction = Math.min(elapsedMs / etaMs, 0.92);
+        teamPos = lerpPos(teamBase, incidentPos, progressFraction);
+      }
       const distLeft = haversineKm(teamPos, incidentPos);
       const pct = Math.round(progressFraction * 100);
-      trackerStatus = `🚨 ${teamBase.icon} En Route — ${distLeft.toFixed(1)} km away (${pct}% of journey)`;
+      trackerStatus = `🚨 ${teamBase.icon} En Route — ${distLeft.toFixed(1)} km away (${pct}% of journey)${isRealGPS ? ' (Live GPS)' : ''}`;
     } else if (statusIndex === 5) {
       teamPos = { ...incidentPos };
       trackerStatus = `📍 ${teamBase.icon} Arrived at scene — ${e.status}`;
@@ -1141,7 +1182,7 @@ function renderTrackingPage(data, root) {
       if (statusIndex >= 2) {
         markers.push({
           pos: teamBase,
-          title: `🏢 ${e.recommended_team} Base`,
+          title: `🏢 ${assignedUnit} Base`,
           color: '#3b82f6',
           info: `<div style="color:#000; font-size:0.82rem; padding:0.25rem;">
             🏢 <strong>Team Base</strong><br>
@@ -1153,15 +1194,16 @@ function renderTrackingPage(data, root) {
         const distTravelled = (haversineKm(teamBase, teamPos)).toFixed(1);
         markers.push({
           pos: teamPos,
-          title: `${teamBase.icon} ${e.nearest_rescue_team || e.recommended_team}`,
+          title: `${teamBase.icon} ${assignedUnit}`,
           icon: teamBase.icon,
           info: `<div style="color:#000; font-size:0.82rem; padding:0.25rem;">
-            ${teamBase.icon} <strong>${e.nearest_rescue_team || e.recommended_team}</strong><br>
+            ${teamBase.icon} <strong>${assignedUnit}</strong><br>
             Status: <strong>${e.status}</strong><br>
             ${statusIndex === 4 ? `Travelled: ${distTravelled} km of ${totalDist} km` : ''}
           </div>`
         });
       }
+
 
       const mapResult = await renderUnifiedMap('tracker-map', incidentPos, 13, markers);
 
@@ -1239,8 +1281,8 @@ function updateControlRoomMap() {
         <div style="font-size:0.8rem; margin-bottom:0.4rem;"><strong>Status:</strong> ${e.status}</div>
         <div style="font-size:0.8rem; margin-bottom:0.4rem;"><strong>Assigned Team:</strong> ${assignedUnit || 'Unassigned'}</div>
         <div style="font-size:0.78rem; background:#f4f4f5; padding:0.35rem; border-radius:4px; color:#4b5563; margin-bottom:0.5rem;"><strong>AI Summary:</strong> ${e.ai_decision_summary || 'No summary available.'}</div>
-        <div>
-          <a href="https://www.google.com/maps/dir/?api=1&destination=${e.lat},${e.lng}" target="_blank" style="display:inline-flex; align-items:center; gap:0.25rem; font-weight:700; font-size:0.8rem; text-decoration:none; color:#3b82f6;">
+        <div style="margin-top: 0.5rem;">
+          <a href="https://www.google.com/maps/dir/?api=1&destination=${e.lat},${e.lng}" target="_blank" class="team-btn" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8); border:none; text-decoration:none; color:#ffffff; font-size:0.75rem; font-weight:700; display:flex; align-items:center; justify-content:center; gap:0.3rem; padding:0.4rem 0.8rem; cursor:pointer; border-radius:4px; text-align:center;">
             🚗 Navigate to Scene
           </a>
         </div>
@@ -1257,19 +1299,28 @@ function updateControlRoomMap() {
     // 2. Dispatched Team & Base station tracking on control map
     const statusIndex = STATUS_MAPPING[e.status] ?? 0;
     if (statusIndex >= 2 && assignedUnit) {
-      const teamBase = TEAM_BASES[assignedUnit] || { lat: 17.3850, lng: 78.4867, name: 'Central Command Base', icon: '🚒' };
+      const teamBase = TEAM_BASES[assignedUnit] || TEAM_BASES[e.recommended_team] || { lat: 17.3850, lng: 78.4867, name: 'Central Command Base', icon: '🚒' };
       const incidentPos = { lat: parseFloat(e.lat), lng: parseFloat(e.lng) };
 
       let teamPos = { ...teamBase };
       let progressFraction = 0;
+      let isRealGPS = false;
 
-      if (statusIndex === 4) {
+      if (e.team_lat && e.team_lng && statusIndex >= 2 && statusIndex < 7) {
+        teamPos = { lat: parseFloat(e.team_lat), lng: parseFloat(e.team_lng) };
+        isRealGPS = true;
+        const totalD = haversineKm(teamBase, incidentPos);
+        const coveredD = haversineKm(teamBase, teamPos);
+        progressFraction = totalD > 0 ? Math.min(coveredD / totalD, 0.95) : 0.5;
+      }
+
+      if (statusIndex === 4 && !isRealGPS) {
         const updatedAt = e.updated_at ? new Date(e.updated_at) : new Date();
         const etaMs = (e.response_time_minutes || 15) * 60 * 1000;
         const elapsedMs = Date.now() - updatedAt.getTime();
         progressFraction = Math.min(elapsedMs / etaMs, 0.92);
         teamPos = lerpPos(teamBase, incidentPos, progressFraction);
-      } else if (statusIndex >= 5) {
+      } else if (statusIndex >= 5 && !isRealGPS) {
         teamPos = { ...incidentPos };
       }
 
@@ -1294,7 +1345,7 @@ function updateControlRoomMap() {
         icon: teamBase.icon,
         info: `
           <div style="color:#000000; font-family:sans-serif; padding:0.5rem; max-width:220px; line-height:1.4;">
-            <h4 style="margin:0 0 0.25rem 0; font-size:0.9rem; font-weight:700; color:#22c55e;">🚒 En Route to ${e.emergency_id}</h4>
+            <h4 style="margin:0 0 0.25rem 0; font-size:0.9rem; font-weight:700; color:#22c55e;">🚒 En Route to ${e.emergency_id}${isRealGPS ? ' (Live GPS)' : ''}</h4>
             <div style="font-size:0.8rem; margin-bottom:0.25rem;"><strong>Unit:</strong> ${assignedUnit}</div>
             <div style="font-size:0.8rem; margin-bottom:0.25rem;"><strong>Driver:</strong> ${e.team_driver || '—'}</div>
             <div style="font-size:0.8rem;"><strong>Leader:</strong> ${e.team_leader || '—'}</div>
@@ -1312,19 +1363,28 @@ function updateControlRoomMap() {
         const statusIndex = STATUS_MAPPING[e.status] ?? 0;
         const assignedUnit = e.nearest_rescue_team || e.recommended_team;
         if (statusIndex >= 2 && assignedUnit) {
-          const teamBase = TEAM_BASES[assignedUnit] || { lat: 17.3850, lng: 78.4867, name: 'Central Command Base', icon: '🚒' };
+          const teamBase = TEAM_BASES[assignedUnit] || TEAM_BASES[e.recommended_team] || { lat: 17.3850, lng: 78.4867, name: 'Central Command Base', icon: '🚒' };
           const incidentPos = { lat: parseFloat(e.lat), lng: parseFloat(e.lng) };
 
           let teamPos = { ...teamBase };
           let progressFraction = 0;
+          let isRealGPS = false;
 
-          if (statusIndex === 4) {
+          if (e.team_lat && e.team_lng && statusIndex >= 2 && statusIndex < 7) {
+            teamPos = { lat: parseFloat(e.team_lat), lng: parseFloat(e.team_lng) };
+            isRealGPS = true;
+            const totalD = haversineKm(teamBase, incidentPos);
+            const coveredD = haversineKm(teamBase, teamPos);
+            progressFraction = totalD > 0 ? Math.min(coveredD / totalD, 0.95) : 0.5;
+          }
+
+          if (statusIndex === 4 && !isRealGPS) {
             const updatedAt = e.updated_at ? new Date(e.updated_at) : new Date();
             const etaMs = (e.response_time_minutes || 15) * 60 * 1000;
             const elapsedMs = Date.now() - updatedAt.getTime();
             progressFraction = Math.min(elapsedMs / etaMs, 0.92);
             teamPos = lerpPos(teamBase, incidentPos, progressFraction);
-          } else if (statusIndex >= 5) {
+          } else if (statusIndex >= 5 && !isRealGPS) {
             teamPos = { ...incidentPos };
           }
 
@@ -2185,6 +2245,17 @@ export async function initTeamDashboard() {
         const dist = getHaversineDistance(clat, clng, m.lat, m.lng);
         const nearScene = dist <= 0.15; // 150m
         
+        // Report team live coordinates back to server (throttle to every 5s)
+        const nowTime = Date.now();
+        if (!updateDistance.lastSent || (nowTime - updateDistance.lastSent > 5000)) {
+          updateDistance.lastSent = nowTime;
+          apiPatch(`/api/rescue/emergencies/${selectedEid}`, {
+            team_lat: clat,
+            team_lng: clng,
+            actor: currentTeamUnit || 'Field Team'
+          }).catch(err => console.warn("Failed to report live team coordinates:", err));
+        }
+
         if (distValEl) {
           if (nearScene) {
             distValEl.innerHTML = `<span style="color:var(--color-success); font-weight:700;">📍 Arrived (${(dist*1000).toFixed(0)}m away)</span>`;
