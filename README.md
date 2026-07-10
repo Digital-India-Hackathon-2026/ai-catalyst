@@ -1,37 +1,42 @@
-# AI Catalyst – Smart Governance Repositories
+# GovConnect – Smart Government Services Portal (Phase 1)
 
-This repository contains the hackathon development code for Team **AI CATALYST**. It includes two primary sub-projects:
+**GovConnect** is a full-stack web application designed to unify civic management, disaster rescue, and emergency medical services under a single intelligent portal.
 
-1. **GovConnect** (located in [`/GovConnect`](file:///c:/HACAKTHONS/SNIST/code%20files/ai-catalyst/GovConnect)): The Phase 1 full-stack portal foundation. It hosts the shared stylesheet, reusable components, modular frontend page layouts, and the Flask backend blueprint APIs.
-2. **AssignIQ Engine** (located in the root `/core` and `/modules` folders): The core Decision Support Engine, featuring the multi-criteria officer scoring model, Explainable AI confidence generation, and the real-time simulation dashboard.
+This project represents **Phase 1** of our hackathon development lifecycle. It establishes a strong full-stack project skeleton, enabling parallel development for our team.
 
----
+## Tech Stack
+- **Frontend**: HTML, CSS, JavaScript (Vanilla, premium glassmorphism dark-theme)
+- **Backend**: Flask (Python 3) with blueprint routing and CORS enabled
+- **Database**: SQLite (local dev) & Supabase config placeholders (prepared for Phase 2 integration)
 
-## Directory Navigation
-
-- [GovConnect Portal Directory](file:///c:/HACAKTHONS/SNIST/code%20files/ai-catalyst/GovConnect)
-  - [Frontend Landing Page](file:///c:/HACAKTHONS/SNIST/code%20files/ai-catalyst/GovConnect/frontend/pages/index.html)
-  - [Flask app.py Entrypoint](file:///c:/HACAKTHONS/SNIST/code%20files/ai-catalyst/GovConnect/backend/app.py)
-  - [Supabase Schema Draft](file:///c:/HACAKTHONS/SNIST/code%20files/ai-catalyst/GovConnect/database/schema.sql)
-- [AssignIQ Decision Intelligence Simulator](file:///c:/HACAKTHONS/SNIST/code%20files/ai-catalyst/index.html)
-  - [AI Matching Rules](file:///c:/HACAKTHONS/SNIST/code%20files/ai-catalyst/core/engine/recommender.js)
-  - [Explainability Logic](file:///c:/HACAKTHONS/SNIST/code%20files/ai-catalyst/core/engine/explanations.js)
-  - [Orchestration Flow](file:///c:/HACAKTHONS/SNIST/code%20files/ai-catalyst/core/engine/orchestrator.js)
-
----
-
-## Running Project Stacks
-
-### 1. GovConnect Portal (Flask API + HTML Pages)
-```bash
-python -m pip install -r GovConnect/requirements.txt
-python GovConnect/backend/app.py
+## Core Structure
+```text
+.
+├── backend/              # Flask Backend API Blueprints
+│   ├── app.py            # Main API entrypoint
+│   └── routes/           # Blueprint controllers returning JSON placeholders
+├── database/             # Database Schemas & SQLite local database
+├── frontend/             # Portal Landing Page & Sub-modules (HTML/CSS/JS)
+│   ├── components/       # Shared Web components (Navbar, Footer, Spinner)
+│   ├── css/              # UI theme stylesheet
+│   └── pages/            # Page layouts for Civic, Rescue, and Medical
+├── ai/                   # GovConnect AI Decision Matching Engine
+└── requirements.txt      # Python backend dependencies
 ```
-*Open `GovConnect/frontend/pages/index.html` in browser to view.*
 
-### 2. AssignIQ Simulator (Vite Server)
+## Running the Application
+
+### 1. Start the Flask Backend
 ```bash
-npm install
+python -m pip install -r requirements.txt
+python backend/app.py
+```
+The API server will run at `http://127.0.0.1:5000/`.
+
+### 2. View the Portal Page
+To serve the frontend assets locally:
+```bash
 npm run dev
 ```
-*Open the Vite URL (typically `http://localhost:5173/`) in browser to view.*
+And open the portal URL in your web browser:
+`http://localhost:5173/frontend/pages/index.html`

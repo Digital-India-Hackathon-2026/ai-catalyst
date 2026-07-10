@@ -424,13 +424,13 @@ function updateCoords(lat, lng) {
 }
 
 // Helper Debouncer
-defun = debounce = (func, delay) => {
+function debounce(func, delay = 300) {
   let timer;
   return function (...args) {
     clearTimeout(timer);
     timer = setTimeout(() => func.apply(this, args), delay);
   };
-};
+}
 
 // --- GENERAL COMPLAINTS LEDGER TABLE ---
 
