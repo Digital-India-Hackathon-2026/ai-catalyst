@@ -32,9 +32,13 @@ def asha_dashboard():
     cursor.execute("SELECT SUM(quantity) FROM medicines WHERE village = ?;", (village,))
     available_stock = cursor.fetchone()[0] or 0
     
-    # 3. Low Stock Medicines
-    cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = ? AND quantity < minimum_stock AND expiry_date > ?;", (village, today))
+    # 3. Low Stock Medicines (excluding out of stock)
+    cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = ? AND quantity > 0 AND quantity <= minimum_stock AND expiry_date > ?;", (village, today))
     low_stock_count = cursor.fetchone()[0]
+    
+    # 3.5 Out of Stock Medicines
+    cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = ? AND quantity = 0;", (village,))
+    out_of_stock_count = cursor.fetchone()[0]
     
     # 4. Expired Medicines
     cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = ? AND expiry_date <= ?;", (village, today))
@@ -71,6 +75,31 @@ def asha_dashboard():
     status_rows = cursor.fetchall()
     status_data = {row['status']: row['count'] for row in status_rows}
     
+    # Chart Data 3: Usage By Category (Phase 3 Analytics)
+    thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    cursor.execute("""
+        SELECT m.category, SUM(d.quantity) as total 
+        FROM distributions d
+        JOIN medicines m ON d.medicine_id = m.id
+        WHERE d.village = ? AND d.distributed_date >= ?
+        GROUP BY m.category;
+    """, (village, thirty_days_ago))
+    category_rows = cursor.fetchall()
+    usage_category_labels = [row['category'] for row in category_rows]
+    usage_category_values = [row['total'] for row in category_rows]
+
+    # Chart Data 4: Daily Usage Trend (Last 7 Days)
+    seven_days_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    cursor.execute("""
+        SELECT distributed_date, SUM(quantity) as total 
+        FROM distributions
+        WHERE village = ? AND distributed_date >= ?
+        GROUP BY distributed_date
+        ORDER BY distributed_date ASC;
+    """, (village, seven_days_ago))
+    trend_rows = cursor.fetchall()
+    usage_trend_labels = [row['distributed_date'] for row in trend_rows]
+    usage_trend_values = [row['total'] for row in trend_rows]
     # Fetch alerts
     cursor.execute("""
         SELECT id, medicine_name, quantity, minimum_stock, expiry_date 
@@ -113,6 +142,7 @@ def asha_dashboard():
                            total_medicines=total_medicines,
                            available_stock=available_stock,
                            low_stock_count=low_stock_count,
+                           out_of_stock_count=out_of_stock_count,
                            expired_count=expired_count,
                            expiring_soon_count=expiring_soon_count,
                            distributed_today=distributed_today,
@@ -123,6 +153,10 @@ def asha_dashboard():
                            priority_values=priority_values,
                            status_labels=status_labels,
                            status_values=status_values,
+                           usage_category_labels=usage_category_labels,
+                           usage_category_values=usage_category_values,
+                           usage_trend_labels=usage_trend_labels,
+                           usage_trend_values=usage_trend_values,
                            alerts=alerts)
 
 @asha_bp.route('/inventory')
@@ -134,9 +168,19 @@ def inventory():
     
     today = datetime.now().strftime("%Y-%m-%d")
     expiring_soon_date = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+    thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
     
     conn = get_db_connection()
     cursor = conn.cursor()
+    
+    # AI Engine: Fetch 30-day usage analytics per medicine to calculate daily burn rate
+    cursor.execute("""
+        SELECT medicine_id, SUM(quantity) as total_used 
+        FROM distributions 
+        WHERE village = ? AND distributed_date >= ?
+        GROUP BY medicine_id
+    """, (village, thirty_days_ago))
+    usage_data = {row['medicine_id']: row['total_used'] for row in cursor.fetchall()}
     
     # Get distinct categories for filtering
     cursor.execute("SELECT DISTINCT category FROM medicines WHERE village = ?;", (village,))
@@ -163,15 +207,24 @@ def inventory():
         min_stock = row['minimum_stock']
         exp_date = row['expiry_date']
         
-        # Status calculation logic
+        # Status calculation logic (Phase 3 Intelligence)
         if exp_date <= today:
             status = 'Expired'
         elif exp_date <= expiring_soon_date:
             status = 'Expiring Soon'
-        elif qty < min_stock:
+        elif qty == 0:
+            status = 'Out of Stock'
+        elif qty <= min_stock:
             status = 'Low Stock'
         else:
-            status = 'Available'
+            status = 'Safe'
+            
+        # Calculate AI Restock Recommendation
+        total_used = usage_data.get(row['id'], 0)
+        avg_daily_usage = total_used / 30.0
+        # Formula: (Avg Daily * 30) - Current Stock = Needed Stock
+        projected_need = int((avg_daily_usage * 30) - qty)
+        recommended_restock = max(0, projected_need)
             
         medicines.append({
             'id': row['id'],
@@ -181,9 +234,12 @@ def inventory():
             'unit': row['unit'],
             'batch_number': row['batch_number'],
             'manufacturer': row['manufacturer'],
+            'mfg_date': row['mfg_date'],
             'expiry_date': exp_date,
             'minimum_stock': min_stock,
-            'status': status
+            'status': status,
+            'recommended_restock': recommended_restock,
+            'avg_daily_usage': round(avg_daily_usage, 1)
         })
         
     conn.close()
@@ -204,12 +260,13 @@ def add_medicine():
         unit = request.form.get('unit', '').strip()
         batch_number = request.form.get('batch_number', '').strip()
         manufacturer = request.form.get('manufacturer', '').strip()
+        mfg_date = request.form.get('mfg_date', '').strip()
         expiry_date = request.form.get('expiry_date', '').strip()
         minimum_stock_str = request.form.get('minimum_stock', '').strip()
         village = session['village']
         
         # Validations
-        if not (name and category and quantity_str and unit and batch_number and manufacturer and expiry_date and minimum_stock_str):
+        if not (name and category and quantity_str and unit and batch_number and manufacturer and mfg_date and expiry_date and minimum_stock_str):
             flash("All fields are required.", "error")
             return render_template('medicine_form.html', action='Add', form_data=request.form)
             
@@ -228,9 +285,9 @@ def add_medicine():
         # Save to database
         cursor.execute("""
             INSERT INTO medicines (
-                medicine_name, category, quantity, unit, batch_number, manufacturer, expiry_date, minimum_stock, village
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
-        """, (name, category, quantity, unit, batch_number, manufacturer, expiry_date, minimum_stock, village))
+                medicine_name, category, quantity, unit, batch_number, manufacturer, mfg_date, expiry_date, minimum_stock, village
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, (name, category, quantity, unit, batch_number, manufacturer, mfg_date, expiry_date, minimum_stock, village))
         
         med_id = cursor.lastrowid
         
@@ -270,10 +327,11 @@ def edit_medicine(id):
         unit = request.form.get('unit', '').strip()
         batch_number = request.form.get('batch_number', '').strip()
         manufacturer = request.form.get('manufacturer', '').strip()
+        mfg_date = request.form.get('mfg_date', '').strip()
         expiry_date = request.form.get('expiry_date', '').strip()
         minimum_stock_str = request.form.get('minimum_stock', '').strip()
         
-        if not (name and category and quantity_str and unit and batch_number and manufacturer and expiry_date and minimum_stock_str):
+        if not (name and category and quantity_str and unit and batch_number and manufacturer and mfg_date and expiry_date and minimum_stock_str):
             conn.close()
             flash("All fields are required.", "error")
             return render_template('medicine_form.html', action='Edit', form_data=request.form, medicine_id=id)
@@ -292,9 +350,9 @@ def edit_medicine(id):
         cursor.execute("""
             UPDATE medicines 
             SET medicine_name = ?, category = ?, quantity = ?, unit = ?, batch_number = ?, 
-                manufacturer = ?, expiry_date = ?, minimum_stock = ?
+                manufacturer = ?, mfg_date = ?, expiry_date = ?, minimum_stock = ?
             WHERE id = ?;
-        """, (name, category, quantity, unit, batch_number, manufacturer, expiry_date, minimum_stock, id))
+        """, (name, category, quantity, unit, batch_number, manufacturer, mfg_date, expiry_date, minimum_stock, id))
         
         # Log Transaction
         cursor.execute("""

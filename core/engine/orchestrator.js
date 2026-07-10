@@ -1,4 +1,4 @@
-// Core Workflow Orchestrator for AssignIQ
+// Core Workflow Orchestrator for GovConnect
 
 import { dbStore } from "../db/store.js";
 import { getRecommendations } from "./recommender.js";

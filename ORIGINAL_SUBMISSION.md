@@ -10,7 +10,7 @@ ai-catalyst
 Digital Governance & Public Services
 
 ## Idea
-AssignIQ – Autonomous Government Decision Intelligence Platform
+GovConnect – Autonomous Government Decision Intelligence Platform
 
 1. Problem Statement
 
@@ -66,23 +66,23 @@ The core problem is no longer digitizing government forms—it is enabling intel
 
 2. Our Solution
 
-AssignIQ – Autonomous Government Decision Intelligence Platform
+GovConnect – Autonomous Government Decision Intelligence Platform
 
-AssignIQ is an AI-powered decision intelligence platform designed to help government departments intelligently manage operations from request creation to task completion.
+GovConnect is an AI-powered decision intelligence platform designed to help government departments intelligently manage operations from request creation to task completion.
 
-Rather than simply assigning work, AssignIQ continuously analyzes operational data to recommend the most suitable officer or field team, predict operational risks, optimize workloads, and monitor execution in real time.
+Rather than simply assigning work, GovConnect continuously analyzes operational data to recommend the most suitable officer or field team, predict operational risks, optimize workloads, and monitor execution in real time.
 
 The platform functions as an intelligent decision-support system that assists government officials while keeping humans in control of final decisions.
 
 AI Decision Intelligence Engine
 
-AssignIQ is built around a reusable AI orchestration engine that supports multiple government departments, including:
+GovConnect is built around a reusable AI orchestration engine that supports multiple government departments, including:
 
 - Mandal Offices
 - Municipal Corporations
 - Rescue & Disaster Response
 
-Instead of creating separate software for each department, AssignIQ provides a common intelligence layer that adapts to each department's workflow.
+Instead of creating separate software for each department, GovConnect provides a common intelligence layer that adapts to each department's workflow.
 
 Core AI Capabilities
 
@@ -118,7 +118,7 @@ Government officials always have the authority to approve, modify, or reject AI 
 
 3. Impact of the Solution
 
-AssignIQ enables government departments to move from reactive administration to proactive, data-driven governance.
+GovConnect enables government departments to move from reactive administration to proactive, data-driven governance.
 
 Impact on Citizens
 
@@ -145,9 +145,9 @@ Impact on Government
 
 Long-Term Impact
 
-AssignIQ is designed as a scalable Government Decision Intelligence Platform that can be extended beyond Mandal Offices, Municipal Corporations, and Rescue & Disaster Response to support Electricity Departments, Water Boards, Public Works, Government Hospitals, Fire Services, and other public agencies.
+GovConnect is designed as a scalable Government Decision Intelligence Platform that can be extended beyond Mandal Offices, Municipal Corporations, and Rescue & Disaster Response to support Electricity Departments, Water Boards, Public Works, Government Hospitals, Fire Services, and other public agencies.
 
-By introducing Explainable Artificial Intelligence into day-to-day government operations, AssignIQ supports the vision of Digital India by making governance faster, smarter, more transparent, and more accountable while ensuring that final decisions remain under human supervision.
+By introducing Explainable Artificial Intelligence into day-to-day government operations, GovConnect supports the vision of Digital India by making governance faster, smarter, more transparent, and more accountable while ensuring that final decisions remain under human supervision.
 
 ## Team Members
 - Adithya Goud Palamoor

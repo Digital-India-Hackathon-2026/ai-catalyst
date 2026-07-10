@@ -1,4 +1,4 @@
-// Base Module Interface for AssignIQ Departments
+// Base Module Interface for GovConnect Departments
 
 import { orchestrator } from "../core/engine/orchestrator.js";
 
@@ -32,7 +32,7 @@ export class BaseModule {
   }
 
   /**
-   * Standardizes the incoming payload to match AssignIQ's internal task schema.
+   * Standardizes the incoming payload to match GovConnect's internal task schema.
    * Subclasses should override this to specify their custom fields and mappings.
    */
   formatTaskData(data) {

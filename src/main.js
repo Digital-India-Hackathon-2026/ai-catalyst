@@ -1,4 +1,4 @@
-// AssignIQ Application main script
+// GovConnect Application main script
 
 import { dbStore } from "../core/db/store.js";
 import { orchestrator } from "../core/engine/orchestrator.js";

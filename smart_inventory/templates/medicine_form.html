@@ -23,8 +23,17 @@
             <!-- Field 2: Category -->
             <div class="form-group">
                 <label for="category">Category *</label>
-                <input type="text" id="category" name="category" required placeholder="e.g. Analgesics, Antibiotics"
-                       value="{{ form_data.category if form_data else '' }}">
+                <select id="category" name="category" required>
+                    <option value="">Select Category</option>
+                    <option value="Tablets" {% if form_data and form_data.category == 'Tablets' %}selected{% endif %}>Tablets</option>
+                    <option value="Syrups" {% if form_data and form_data.category == 'Syrups' %}selected{% endif %}>Syrups</option>
+                    <option value="Vaccines" {% if form_data and form_data.category == 'Vaccines' %}selected{% endif %}>Vaccines</option>
+                    <option value="Nutrition" {% if form_data and form_data.category == 'Nutrition' %}selected{% endif %}>Nutrition</option>
+                    <option value="Pregnancy" {% if form_data and form_data.category == 'Pregnancy' %}selected{% endif %}>Pregnancy</option>
+                    <option value="Child Care" {% if form_data and form_data.category == 'Child Care' %}selected{% endif %}>Child Care</option>
+                    <option value="Emergency" {% if form_data and form_data.category == 'Emergency' %}selected{% endif %}>Emergency</option>
+                    <option value="First Aid" {% if form_data and form_data.category == 'First Aid' %}selected{% endif %}>First Aid</option>
+                </select>
             </div>
             
             <!-- Field 4: Unit -->
@@ -65,7 +74,23 @@
                        value="{{ form_data.batch_number if form_data else '' }}">
             </div>
             
-            <!-- Field 7: Expiry Date -->
+            <!-- Field 6: Manufacturer -->
+            <div class="form-group">
+                <label for="manufacturer">Manufacturer / Supplier *</label>
+                <input type="text" id="manufacturer" name="manufacturer" required placeholder="e.g. Cipla, Sun Pharma"
+                       value="{{ form_data.manufacturer if form_data else '' }}">
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <!-- Field 7: Mfg Date -->
+            <div class="form-group">
+                <label for="mfg_date">Manufacturing Date *</label>
+                <input type="date" id="mfg_date" name="mfg_date" required
+                       value="{{ form_data.mfg_date if form_data else '' }}">
+            </div>
+            
+            <!-- Field 8: Expiry Date -->
             <div class="form-group">
                 <label for="expiry_date">Expiry Date *</label>
                 <input type="date" id="expiry_date" name="expiry_date" required
@@ -73,12 +98,7 @@
             </div>
         </div>
         
-        <!-- Field 6: Manufacturer -->
-        <div class="form-group">
-            <label for="manufacturer">Manufacturer / Supplier *</label>
-            <input type="text" id="manufacturer" name="manufacturer" required placeholder="e.g. Cipla, Sun Pharma"
-                   value="{{ form_data.manufacturer if form_data else '' }}">
-        </div>
+
         
         <div class="btn-group" style="margin-top: 20px;">
             <button type="submit" class="btn btn-primary">Save Medicine Profile</button>

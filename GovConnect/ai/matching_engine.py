@@ -1,4 +1,4 @@
-# GovConnect AI Decision Matching Engine (AssignIQ Python stub)
+# GovConnect AI Decision Matching Engine (GovConnect Python stub)
 
 class RecommenderEngine:
     def __init__(self):
