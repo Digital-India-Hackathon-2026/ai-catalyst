@@ -736,13 +736,33 @@ export async function initTrackingPage() {
 
   root.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div><p>Loading tracking data…</p></div>`;
 
-  try {
-    const data = await apiGet(`/api/rescue/track/${eid}`);
-    renderTrackingPage(data, root);
-  } catch (err) {
-    root.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><p>Could not load tracking for ${eid}.</p></div>`;
+  const CLOSED_STATUSES = ['Mission Completed', 'Rescue Completed', 'Case Closed'];
+  let refreshInterval = null;
+
+  async function fetchAndRender() {
+    try {
+      const data = await apiGet(`/api/rescue/track/${eid}`);
+      renderTrackingPage(data, root);
+
+      // Stop polling if mission is closed
+      if (CLOSED_STATUSES.includes(data.emergency?.status)) {
+        if (refreshInterval) {
+          clearInterval(refreshInterval);
+          refreshInterval = null;
+        }
+      }
+    } catch (err) {
+      root.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><p>Could not load tracking for ${eid}.</p></div>`;
+      if (refreshInterval) clearInterval(refreshInterval);
+    }
   }
+
+  await fetchAndRender();
+
+  // Auto-refresh every 10 seconds for live updates
+  refreshInterval = setInterval(fetchAndRender, 10000);
 }
+
 
 const STEP_DESCRIPTIONS = [
   'Your emergency report has been received by the system.',
@@ -855,98 +875,144 @@ function renderTrackingPage(data, root) {
     };
 
     const teamBase = TEAM_BASES[e.recommended_team] || { lat: 17.3850, lng: 78.4867, name: 'Central Command Base', icon: '🚒' };
-    // Use GPS if available, otherwise use team base as approximate location
     const incidentPos = (e.lat && e.lng)
       ? { lat: parseFloat(e.lat), lng: parseFloat(e.lng) }
-      : { lat: teamBase.lat + 0.005, lng: teamBase.lng + 0.005 }; // ~500m offset from base
-
-
-    let teamPos = { ...teamBase };
-    let trackerStatus = 'Preparing dispatch...';
+      : { lat: teamBase.lat + 0.005, lng: teamBase.lng + 0.005 };
 
     const statusIndex = current_step_index;
-    
-    if (statusIndex <= 3) {
+
+    // ── Haversine distance in km ──────────────────────────────
+    function haversineKm(a, b) {
+      const R = 6371;
+      const dLat = (b.lat - a.lat) * Math.PI / 180;
+      const dLng = (b.lng - a.lng) * Math.PI / 180;
+      const x = Math.sin(dLat/2)**2 + Math.cos(a.lat*Math.PI/180) * Math.cos(b.lat*Math.PI/180) * Math.sin(dLng/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+    }
+
+    // ── Lerp position ─────────────────────────────────────────
+    function lerpPos(a, b, t) {
+      t = Math.max(0, Math.min(1, t));
+      return { lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t };
+    }
+
+    // ── Compute vehicle position based on time elapsed ────────
+    let teamPos = { ...teamBase };
+    let trackerStatus = '';
+    let progressFraction = 0;
+
+    if (statusIndex <= 1) {
       teamPos = { ...teamBase };
-      trackerStatus = `Unit status: ${e.status}. Stationary at ${teamBase.name}.`;
+      trackerStatus = `⏳ Awaiting dispatch — ${e.status}`;
+    } else if (statusIndex === 2 || statusIndex === 3) {
+      teamPos = { ...teamBase };
+      trackerStatus = `🏢 ${e.nearest_rescue_team || e.recommended_team} — ${e.status} at ${teamBase.name}`;
     } else if (statusIndex === 4) {
-      teamPos = {
-        lat: teamBase.lat + (incidentPos.lat - teamBase.lat) * 0.5,
-        lng: teamBase.lng + (incidentPos.lng - teamBase.lng) * 0.5
-      };
-      trackerStatus = `Unit status: ${e.status}. En route to incident scene.`;
+      // Journey started — calculate time-based progress
+      const updatedAt = e.updated_at ? new Date(e.updated_at) : new Date();
+      const etaMs = (e.response_time_minutes || 15) * 60 * 1000;
+      const elapsedMs = Date.now() - updatedAt.getTime();
+      progressFraction = Math.min(elapsedMs / etaMs, 0.92); // cap at 92% until "Reached"
+
+      teamPos = lerpPos(teamBase, incidentPos, progressFraction);
+      const distLeft = haversineKm(teamPos, incidentPos);
+      const pct = Math.round(progressFraction * 100);
+      trackerStatus = `🚨 ${teamBase.icon} En Route — ${distLeft.toFixed(1)} km away (${pct}% of journey)`;
+    } else if (statusIndex === 5) {
+      teamPos = { ...incidentPos };
+      trackerStatus = `📍 ${teamBase.icon} Arrived at scene — ${e.status}`;
     } else {
       teamPos = { ...incidentPos };
-      trackerStatus = `Unit status: ${e.status}. Arrived at incident scene.`;
+      trackerStatus = `🔨 ${teamBase.icon} ${e.status}`;
     }
 
     setTimeout(async () => {
+      const totalDist = haversineKm(teamBase, incidentPos).toFixed(1);
       const markers = [
         {
           pos: incidentPos,
-          title: `Emergency Location`,
+          title: `📍 Emergency Location`,
           color: '#ef4444',
-          info: `<div style="color:#000; font-size:0.82rem;">📍 <strong>Incident Location</strong><br>${e.incident_type}</div>`
+          info: `<div style="color:#000; font-size:0.82rem; padding:0.25rem;">
+            📍 <strong>Incident Location</strong><br>
+            ${e.incident_type}<br>
+            <span style="color:#ef4444; font-weight:700;">${e.severity} Priority</span>
+          </div>`
         }
       ];
 
       if (statusIndex >= 2) {
         markers.push({
           pos: teamBase,
-          title: `${e.recommended_team} Base`,
+          title: `🏢 ${e.recommended_team} Base`,
           color: '#3b82f6',
-          info: `<div style="color:#000; font-size:0.82rem;">🏢 <strong>${e.recommended_team} Base</strong><br>${teamBase.name}</div>`
+          info: `<div style="color:#000; font-size:0.82rem; padding:0.25rem;">
+            🏢 <strong>Team Base</strong><br>
+            ${teamBase.name}<br>
+            Total distance: ${totalDist} km
+          </div>`
         });
 
+        const distTravelled = (haversineKm(teamBase, teamPos)).toFixed(1);
         markers.push({
           pos: teamPos,
-          title: `${e.nearest_rescue_team || e.recommended_team} Vehicle`,
+          title: `${teamBase.icon} ${e.nearest_rescue_team || e.recommended_team}`,
           icon: teamBase.icon,
-          info: `<div style="color:#000; font-size:0.82rem;">${teamBase.icon} <strong>${e.nearest_rescue_team || e.recommended_team}</strong><br>Status: ${e.status}</div>`
+          info: `<div style="color:#000; font-size:0.82rem; padding:0.25rem;">
+            ${teamBase.icon} <strong>${e.nearest_rescue_team || e.recommended_team}</strong><br>
+            Status: <strong>${e.status}</strong><br>
+            ${statusIndex === 4 ? `Travelled: ${distTravelled} km of ${totalDist} km` : ''}
+          </div>`
         });
       }
 
       const mapResult = await renderUnifiedMap('tracker-map', incidentPos, 13, markers);
-      
+
+      // Update status text
       const statusTextEl = document.getElementById('tracker-status-text');
       if (statusTextEl) {
         statusTextEl.textContent = trackerStatus;
+        // Pulse orange when en route
+        statusTextEl.style.color = statusIndex === 4 ? '#fb923c' : 'var(--text-muted)';
+        statusTextEl.style.fontWeight = statusIndex === 4 ? '700' : '400';
       }
 
+      // Draw dashed route line base→incident
       if (mapResult && statusIndex >= 2) {
         const rawMap = mapResult.map;
         if (mapResult.type === 'leaflet') {
           L.polyline([
             [teamBase.lat, teamBase.lng],
             [incidentPos.lat, incidentPos.lng]
-          ], {
-            color: '#fb923c',
-            weight: 3,
-            dashArray: '5, 8'
-          }).addTo(rawMap);
+          ], { color: '#fb923c', weight: 3, dashArray: '6, 8', opacity: 0.75 }).addTo(rawMap);
+
+          // Progress line (solid) showing distance covered
+          if (statusIndex === 4 && progressFraction > 0) {
+            L.polyline([
+              [teamBase.lat, teamBase.lng],
+              [teamPos.lat, teamPos.lng]
+            ], { color: '#22c55e', weight: 4, opacity: 0.9 }).addTo(rawMap);
+          }
         } else if (mapResult.type === 'google') {
           new google.maps.Polyline({
             path: [teamBase, incidentPos],
-            geodesic: true,
-            strokeColor: '#fb923c',
-            strokeOpacity: 0.8,
-            strokeWeight: 3,
-            icons: [{
-              icon: {
-                path: 'M 0,-1 0,1',
-                strokeOpacity: 1,
-                scale: 2
-              },
-              offset: '0',
-              repeat: '10px'
-            }],
+            strokeColor: '#fb923c', strokeOpacity: 0.6, strokeWeight: 3,
+            icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '12px' }],
             map: rawMap
           });
+          if (statusIndex === 4 && progressFraction > 0) {
+            new google.maps.Polyline({
+              path: [teamBase, teamPos],
+              strokeColor: '#22c55e', strokeOpacity: 0.9, strokeWeight: 4,
+              map: rawMap
+            });
+          }
         }
       }
     }, 100);
   }
 }
+
 
 
 // ─── CONTROL ROOM ──────────────────────────────────────────
