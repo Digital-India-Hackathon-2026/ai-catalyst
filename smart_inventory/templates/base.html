@@ -76,6 +76,12 @@
                             <span>Ask for More</span>
                         </a>
                     </li>
+                    <li>
+                        <a href="{{ url_for('polio.dashboard') }}" class="sidebar-link {% if 'polio' in request.endpoint %}active{% endif %}">
+                            <span class="sidebar-logo-icon"><i class="fa-solid fa-vial"></i></span>
+                            <span>POLIO Updates</span>
+                        </a>
+                    </li>
                 {% elif session['role'] == 'mandal' %}
                     <li>
                         <a href="{{ url_for('mandal.mandal_dashboard') }}" class="sidebar-link {% if request.endpoint == 'mandal.mandal_dashboard' or request.endpoint == 'mandal.village_inventory' or (request.endpoint == 'mandal.request_view' and not session['role'] == 'asha') %}active{% endif %}">
