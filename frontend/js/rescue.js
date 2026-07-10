@@ -472,14 +472,27 @@ export async function initControlRoom() {
 
   root.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div><p>Loading emergencies…</p></div>`;
 
-  try {
-    controlData = await apiGet('/api/rescue/emergencies');
-    renderStats(statsEl);
-    renderEmergencies(root, controlData);
-    initFilters(root, statsEl);
-  } catch (err) {
-    root.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><p>Failed to load: ${err.message}. Is the Flask backend running?</p></div>`;
+  async function refresh() {
+    try {
+      controlData = await apiGet('/api/rescue/emergencies');
+      renderStats(statsEl);
+      const filtered = activeFilter === 'all'
+        ? controlData
+        : controlData.filter(e =>
+            e.severity.toLowerCase() === activeFilter ||
+            e.status.toLowerCase().includes(activeFilter)
+          );
+      renderEmergencies(root, filtered);
+    } catch (err) {
+      root.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><p>Failed to load: ${err.message}. Is the Flask backend running?</p></div>`;
+    }
   }
+
+  await refresh();
+  initFilters(root, statsEl);
+
+  // Auto-refresh every 30 seconds so completed missions appear immediately
+  setInterval(refresh, 30000);
 }
 
 function renderStats(el) {
@@ -568,6 +581,33 @@ function buildEmergencyCard(e) {
     `;
   }
 
+  // ── Team Roster Panel ──
+  const assignedUnit = e.nearest_rescue_team || e.recommended_team;
+  let rosterHTML = '';
+  if (assignedUnit) {
+    const assignReason = e.severity === 'Critical'
+      ? `<span style="color:#fca5a5;">🤖 Auto-dispatched by AI</span> — Critical priority case routed to least-loaded unit based on time burden scoring.`
+      : `<span style="color:#fcd34d;">👤 Supervisor Approved</span> — Assigned based on specialization match and current workload.`;
+
+    const memberBadges = e.team_members
+      ? e.team_members.split(',').map(m => `<span style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:0.15rem 0.55rem;font-size:0.72rem;white-space:nowrap;">${m.trim()}</span>`).join('')
+      : '<span style="color:var(--text-muted); font-size:0.78rem;">No roster data</span>';
+
+    rosterHTML = `
+      <div style="margin-top:0.75rem; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.75rem;">
+        <div style="font-size:0.72rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.5rem;">🚒 Assigned Team: ${assignedUnit}</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.4rem 1rem; font-size:0.78rem; margin-bottom:0.5rem;">
+          <div><span style="color:var(--text-muted);">👮 Leader:</span> <strong>${e.team_leader || '—'}</strong></div>
+          <div><span style="color:var(--text-muted);">🚐 Driver:</span> <strong>${e.team_driver || '—'}</strong></div>
+          <div style="grid-column:1/-1;"><span style="color:var(--text-muted);">🎯 Specialization:</span> ${e.team_specialization || '—'}</div>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:0.3rem; margin-bottom:0.5rem;">${memberBadges}</div>
+        <div style="font-size:0.75rem; color:var(--text-secondary); background:rgba(255,255,255,0.03); border-radius:6px; padding:0.4rem 0.6rem;">
+          <span style="font-weight:700;">📋 Assignment Reason:</span> ${assignReason}
+        </div>
+      </div>`;
+  }
+
   return `
     <div class="emergency-card sev-${sevClass}">
       <div class="ec-top">
@@ -584,12 +624,13 @@ function buildEmergencyCard(e) {
       </div>
       <div class="ec-description">${e.description}</div>
       <div class="ec-meta-row">
-        <span class="ec-meta-item">🚒 Team: ${e.nearest_rescue_team || e.recommended_team}</span>
+        <span class="ec-meta-item">🚒 Team: ${assignedUnit || 'Unassigned'}</span>
         <span class="ec-meta-item">🏢 Depts: ${e.recommended_departments || 'N/A'}</span>
         <span class="ec-meta-item">⏱ ${e.response_time_minutes} min ETA</span>
         <span class="ec-meta-item">🎯 ${e.confidence_score}% confidence</span>
         ${e.landmark ? `<span class="ec-meta-item">📍 ${e.landmark}</span>` : ''}
       </div>
+      ${rosterHTML}
       <div class="ec-actions">${actionsHTML}</div>
     </div>
   `;

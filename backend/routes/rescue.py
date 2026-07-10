@@ -179,6 +179,26 @@ UNIT_CREDENTIALS = {
 }
 
 
+# ─── Team Roster (hardcoded for prototype) ───
+TEAM_ROSTER = {
+    'Fire Unit 1':       {'leader': 'Cpt. Arjun Reddy',     'driver': 'Const. Manoj Kumar',    'members': ['FF. Sai Kiran', 'FF. Ravi Teja'],         'specialization': 'Structural Fire & Rescue'},
+    'Fire Unit 2':       {'leader': 'Cpt. Priya Sharma',    'driver': 'Const. Deepak Rao',     'members': ['FF. Anjali Devi', 'FF. Kiran Babu'],       'specialization': 'Industrial Fire Response'},
+    'Fire Unit 3':       {'leader': 'Cpt. Suresh Naidu',    'driver': 'Const. Arun Verma',     'members': ['FF. Pooja Singh', 'FF. Rahul Nair'],       'specialization': 'High-Rise Fire Ops'},
+    'NDRF Unit A':       {'leader': 'Cmdr. Vikram Singh',   'driver': 'Hav. Santhosh Kumar',   'members': ['Sep. Lokesh', 'Sep. Dinesh', 'Sep. Amar'], 'specialization': 'Flood Search & Rescue'},
+    'NDRF Unit B':       {'leader': 'Cmdr. Meena Patel',    'driver': 'Hav. Gopal Reddy',      'members': ['Sep. Naveen', 'Sep. Karthik'],             'specialization': 'Water Rescue & Evacuation'},
+    'SDRF Unit 1':       {'leader': 'Insp. Raju Yadav',     'driver': 'HC. Venkat Rao',        'members': ['PC. Sunil', 'PC. Madhu', 'PC. Bhaskar'],  'specialization': 'Debris Removal & Collapse Rescue'},
+    'SDRF Unit 2':       {'leader': 'Insp. Lakshmi Devi',   'driver': 'HC. Prasad Goud',       'members': ['PC. Uday', 'PC. Shyam'],                  'specialization': 'Earthquake Response'},
+    'Hazmat Unit Alpha': {'leader': 'Maj. Aditya Kapoor',   'driver': 'Sgt. Ramesh Babu',      'members': ['Tch. Anand', 'Tch. Vijay', 'Tch. Mohan'], 'specialization': 'Chemical & Gas Leak Response'},
+    'Hazmat Unit Beta':  {'leader': 'Maj. Sunita Reddy',    'driver': 'Sgt. Harish Nair',      'members': ['Tch. Sridhar', 'Tch. Swamy'],             'specialization': 'Biological Hazard Containment'},
+    'ERT Unit 1':        {'leader': 'Dr. Kavitha Rao',      'driver': 'EMT. Ganesh Prasad',    'members': ['Para. Suresh', 'Para. Ramya'],             'specialization': 'Advanced Life Support'},
+    'ERT Unit 2':        {'leader': 'Dr. Sameer Khan',      'driver': 'EMT. Arjun Goud',       'members': ['Para. Preethi', 'Para. Siva Kumar'],       'specialization': 'Mass Casualty Response'},
+    'EE Unit A':         {'leader': 'Eng. Nagaraju Pillai', 'driver': 'Tech. Ravi Shankar',    'members': ['Line. Murali', 'Line. Sekhar'],            'specialization': 'HV Line & Transformer Faults'},
+    'EE Unit B':         {'leader': 'Eng. Padma Kumari',    'driver': 'Tech. Balaji Redd',     'members': ['Line. Srinivas', 'Line. Naresh'],          'specialization': 'Underground Cable & Grid Faults'},
+    'Civic Crew 1':      {'leader': 'Sup. Mahesh Gupta',    'driver': 'Op. Ramu Naidu',        'members': ['Wk. Jagadeesh', 'Wk. Prakash'],           'specialization': 'Tree Fall & Road Blockage'},
+    'Civic Crew 2':      {'leader': 'Sup. Rekha Babu',      'driver': 'Op. Satish Kumar',      'members': ['Wk. Venkatesh', 'Wk. Sridhar Rao'],       'specialization': 'Building Collapse & Civic Debris'},
+}
+
+
 def get_initial_status(severity: str) -> str:
     """Determine initial status based on Decision Policy."""
     if severity == 'Critical':
@@ -373,6 +393,7 @@ def list_emergencies():
     """
     List all rescue emergencies for Control Room Dashboard.
     Supports filtering by severity and status.
+    Each record includes team roster details for display.
     """
     severity_filter = request.args.get('severity')
     status_filter   = request.args.get('status')
@@ -394,6 +415,22 @@ def list_emergencies():
         query += " ORDER BY submitted_at DESC"
         cursor.execute(query, params)
         emergencies = [dict(row) for row in cursor.fetchall()]
+
+        # Inject team roster for each emergency
+        for e in emergencies:
+            unit = e.get('nearest_rescue_team') or e.get('recommended_team') or ''
+            roster = TEAM_ROSTER.get(unit)
+            if roster:
+                e['team_leader']        = roster['leader']
+                e['team_driver']        = roster['driver']
+                e['team_members']       = ', '.join(roster['members'])
+                e['team_specialization'] = roster['specialization']
+            else:
+                e['team_leader']        = None
+                e['team_driver']        = None
+                e['team_members']       = None
+                e['team_specialization'] = None
+
         return jsonify(emergencies)
 
     except Exception as e:
