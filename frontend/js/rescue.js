@@ -997,15 +997,15 @@ export async function initTeamDashboard() {
         crewLat = simulatedLocation.lat;
         crewLng = simulatedLocation.lng;
       } else if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(pos => {
+        // Use watchPosition for continuous live GPS monitoring during journey
+        navigator.geolocation.watchPosition(pos => {
           if (!simulatedLocation) {
-            crewLat = pos.coords.latitude;
-            crewLng = pos.coords.longitude;
-            updateDistance(crewLat, crewLng);
+            updateDistance(pos.coords.latitude, pos.coords.longitude);
           }
         }, err => {
+          // Fallback: use Hyderabad center if GPS unavailable
           updateDistance(crewLat, crewLng);
-        });
+        }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 });
         return;
       }
       
@@ -1030,6 +1030,25 @@ export async function initTeamDashboard() {
             if (nearScene) {
               actArrivedBtn.className = 'team-btn btn-active';
               actArrivedBtn.removeAttribute('disabled');
+              
+              // AUTO-CLICK: Automatically trigger Reached Location update
+              if (!actArrivedBtn.dataset.autoTriggered) {
+                actArrivedBtn.dataset.autoTriggered = 'true';
+                showToast('📍 Arrived at scene! Status auto-updating to Reached Location...', 'success');
+                setTimeout(async () => {
+                  try {
+                    await apiPatch(`/api/rescue/emergencies/${selectedEid}`, {
+                      status: 'Reached Location',
+                      note: 'Auto-triggered: Crew GPS within 150m of incident scene.',
+                      actor: 'GPS Auto-Detection'
+                    });
+                    showToast('✅ Status updated: Reached Location', 'success');
+                    await loadMissions();
+                  } catch (err) {
+                    showToast(`Auto-update failed: ${err.message}`, 'error');
+                  }
+                }, 1500); // slight delay so crew sees the toast first
+              }
             } else {
               actArrivedBtn.className = 'team-btn btn-disabled';
               actArrivedBtn.setAttribute('disabled', 'true');
