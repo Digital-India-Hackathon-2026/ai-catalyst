@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+
+{% block title %}Record Stock Dispatch #REQ-{{ request.id }} - Smart Inventory System{% endblock %}
+{% block header_title %}Record Stock Dispatch{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width: 600px; margin: 0 auto;">
+    <div class="panel-header">
+        <h3 class="panel-title">🚚 Stock Dispatch Form</h3>
+        <a href="{{ url_for('mandal.request_view', req_id=request.id) }}" class="btn btn-outline btn-sm">&larr; Back to Request</a>
+    </div>
+    
+    <div style="background-color: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 20px; font-size: 0.85rem;">
+        <span style="font-weight: 600; display: block; margin-bottom: 3px;">Replenishment Summary:</span>
+        Village: <strong>{{ request.village }}</strong> | 
+        Medicine: <strong>{{ request.medicine_name }}</strong> | 
+        Requested Quantity: <strong>{{ request.requested_quantity }} {{ request.unit }}</strong>
+    </div>
+
+    <form method="POST" action="{{ url_for('mandal.dispatch_new', req_id=request.id) }}" class="form-container">
+        <!-- Quantity Sent -->
+        <div class="form-group">
+            <label for="quantity_sent" class="form-label">Quantity Sent *</label>
+            <input type="number" name="quantity_sent" id="quantity_sent" class="filter-select" style="width: 100%;" 
+                min="1" value="{% if form_data %}{{ form_data.get('quantity_sent') }}{% else %}{{ request.requested_quantity }}{% endif %}" required>
+            <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 3px;">Pre-filled with the worker's requested quantity. Adjust if partial stock is being sent.</span>
+        </div>
+
+        <!-- Dispatch Date -->
+        <div class="form-group">
+            <label for="dispatch_date" class="form-label">Dispatch Date *</label>
+            <input type="date" name="dispatch_date" id="dispatch_date" class="filter-select" style="width: 100%;" 
+                value="{% if form_data %}{{ form_data.get('dispatch_date') }}{% else %}{{ default_date }}{% endif %}" required>
+        </div>
+
+        <!-- Vehicle Number -->
+        <div class="form-group">
+            <label for="vehicle_number" class="form-label">Vehicle Number (Optional)</label>
+            <input type="text" name="vehicle_number" id="vehicle_number" class="filter-select" style="width: 100%;" 
+                placeholder="e.g. AP-09-V-1234, Government Health Van 3" value="{% if form_data %}{{ form_data.get('vehicle_number') }}{% endif %}">
+        </div>
+
+        <!-- Delivery Notes -->
+        <div class="form-group">
+            <label for="delivery_notes" class="form-label">Delivery Notes / Remarks</label>
+            <textarea name="delivery_notes" id="delivery_notes" class="filter-select" style="width: 100%; height: 80px; resize: vertical;" 
+                placeholder="Add loading details, driver contact details, or delivery remarks...">{% if form_data %}{{ form_data.get('delivery_notes') }}{% endif %}</textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 15px; padding: 12px;">Confirm Stock Dispatch</button>
+    </form>
+</div>
+{% endblock %}

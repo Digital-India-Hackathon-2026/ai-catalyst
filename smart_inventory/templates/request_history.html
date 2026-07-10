@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block title %}Request History - Smart Inventory System{% endblock %}
+{% block header_title %}Medicine Requests History{% endblock %}
+
+{% block content %}
+<div class="panel">
+    <div class="panel-header">
+        <h3 class="panel-title">📋 Stock Replenishment Logs</h3>
+        <a href="{{ url_for('asha.request_new') }}" class="btn btn-primary btn-sm">+ Request Medicines</a>
+    </div>
+    
+    <div class="table-wrapper">
+        <table class="custom-table" id="request-history-table">
+            <thead>
+                <tr>
+                    <th>Request ID</th>
+                    <th>Medicine Name</th>
+                    <th>Requested Qty</th>
+                    <th>Priority</th>
+                    <th>Submission Date</th>
+                    <th>Status</th>
+                    <th class="actions-cell text-print-hide">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if requests %}
+                    {% for req in requests %}
+                        <tr>
+                            <td><strong>#REQ-{{ req.id }}</strong></td>
+                            <td>{{ req.medicine_name }} <span style="font-size: 0.8rem; color: var(--text-muted);">({{ req.batch_number }})</span></td>
+                            <td>{{ req.requested_quantity }} {{ req.unit }}</td>
+                            <td>
+                                {% if req.priority == 'Low' %}
+                                    <span class="status-badge" style="background-color: #f1f5f9; color: #475569;">Low</span>
+                                {% elif req.priority == 'Medium' %}
+                                    <span class="status-badge" style="background-color: #eff6ff; color: #2563eb;">Medium</span>
+                                {% elif req.priority == 'High' %}
+                                    <span class="status-badge" style="background-color: #fff7ed; color: #ea580c;">High</span>
+                                {% elif req.priority == 'Emergency' %}
+                                    <span class="status-badge" style="background-color: #fef2f2; color: #dc2626; font-weight: bold; animation: pulse 2s infinite;">Emergency</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ req.request_date }}</td>
+                            <td>
+                                {% if req.status == 'Pending' %}
+                                    <span class="status-badge" style="background-color: #fef3c7; color: #d97706;">Pending</span>
+                                {% elif req.status == 'Approved' %}
+                                    <span class="status-badge" style="background-color: #dbeafe; color: #1d4ed8;">Approved</span>
+                                {% elif req.status == 'Dispatched' %}
+                                    <span class="status-badge" style="background-color: #fae8ff; color: #a21caf;">Dispatched</span>
+                                {% elif req.status == 'Delivered' %}
+                                    <span class="status-badge" style="background-color: #d1fae5; color: #065f46;">Delivered</span>
+                                {% elif req.status == 'Rejected' %}
+                                    <span class="status-badge" style="background-color: #fee2e2; color: #991b1b;">Rejected</span>
+                                {% endif %}
+                            </td>
+                            <td class="actions-cell text-print-hide">
+                                <a href="{{ url_for('asha.request_view', req_id=req.id) }}" class="btn btn-outline btn-xs">Track Progress &rarr;</a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                            No replenishment requests submitted yet.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

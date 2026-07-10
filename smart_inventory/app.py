@@ -21,6 +21,31 @@ def create_app():
     app.register_blueprint(asha_bp)
     app.register_blueprint(mandal_bp)
 
+    from flask import session
+    from utils.db import get_db_connection
+
+    @app.context_processor
+    def inject_notifications():
+        if 'role' in session:
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                if session['role'] == 'asha':
+                    cursor.execute("SELECT COUNT(*) FROM notifications WHERE user_role = 'asha' AND village = ? AND is_read = 0;", (session['village'],))
+                    unread_count = cursor.fetchone()[0]
+                    cursor.execute("SELECT * FROM notifications WHERE user_role = 'asha' AND village = ? ORDER BY created_at DESC LIMIT 5;", (session['village'],))
+                    recent_notifs = cursor.fetchall()
+                else:
+                    cursor.execute("SELECT COUNT(*) FROM notifications WHERE user_role = 'mandal' AND is_read = 0;")
+                    unread_count = cursor.fetchone()[0]
+                    cursor.execute("SELECT * FROM notifications WHERE user_role = 'mandal' ORDER BY created_at DESC LIMIT 5;")
+                    recent_notifs = cursor.fetchall()
+                conn.close()
+                return dict(unread_notifications_count=unread_count, recent_notifications=recent_notifs)
+            except Exception:
+                pass
+        return dict(unread_notifications_count=0, recent_notifications=[])
+
     return app
 
 if __name__ == '__main__':

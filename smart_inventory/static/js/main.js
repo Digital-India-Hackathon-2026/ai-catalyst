@@ -120,3 +120,65 @@ function dismissToast(toast) {
         toast.remove();
     }, 300);
 }
+
+// Phase 2 Additions
+document.addEventListener("DOMContentLoaded", () => {
+    // 5. Notification Bell Dropdown Toggle
+    const bellBtn = document.getElementById("notif-bell-btn");
+    const notifDropdown = document.getElementById("notif-dropdown");
+    
+    if (bellBtn && notifDropdown) {
+        bellBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            notifDropdown.classList.toggle("active");
+        });
+        
+        document.addEventListener("click", () => {
+            notifDropdown.classList.remove("active");
+        });
+        
+        notifDropdown.addEventListener("click", (e) => {
+            e.stopPropagation();
+        });
+    }
+});
+
+// 6. Export Table to CSV
+window.exportTableToCSV = function(tableId, filename) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    
+    let csv = [];
+    const rows = table.querySelectorAll("tr");
+    
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        if (row.classList.contains("text-print-hide")) continue;
+        
+        let cols = row.querySelectorAll("td, th");
+        let rowData = [];
+        
+        for (let j = 0; j < cols.length; j++) {
+            let cellText = cols[j].innerText.trim();
+            // Remove emojis and cleanup commas/quotes for CSV format
+            cellText = cellText.replace(/"/g, '""');
+            // Clean up back button labels and arrows if present
+            if (cellText.includes("👁️") || cellText.includes("✏️") || cellText.includes("🗑️")) {
+                continue;
+            }
+            rowData.push('"' + cellText + '"');
+        }
+        if (rowData.length > 0) {
+            csv.push(rowData.join(","));
+        }
+    }
+    
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + encodeURIComponent(csv.join("\n"));
+    const link = document.createElement("a");
+    link.setAttribute("href", csvContent);
+    link.setAttribute("download", filename || "report.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+

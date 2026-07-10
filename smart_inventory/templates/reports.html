@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+
+{% block title %}Reports and Analytics - Smart Inventory System{% endblock %}
+{% block header_title %}Replenishment Reports & Analytics{% endblock %}
+
+{% block content %}
+<!-- Reports Filters panel -->
+<div class="panel text-print-hide">
+    <div class="panel-header">
+        <h3 class="panel-title">🔍 Filter Records</h3>
+        <button class="btn btn-outline btn-sm" onclick="window.location.href='{{ url_for('mandal.reports') }}'">Reset Filters</button>
+    </div>
+    
+    <form method="GET" action="{{ url_for('mandal.reports') }}" class="filter-bar" id="report-filter-form">
+        <div style="display: flex; gap: 15px; flex-wrap: wrap; flex-grow: 1;">
+            <!-- Village Filter -->
+            <select name="village" class="filter-select" onchange="document.getElementById('report-filter-form').submit()">
+                <option value="">-- All Villages --</option>
+                {% for vil in villages %}
+                    <option value="{{ vil }}" {% if selected_village == vil %}selected{% endif %}>{{ vil }}</option>
+                {% endfor %}
+            </select>
+            
+            <!-- Status Filter -->
+            <select name="status" class="filter-select" onchange="document.getElementById('report-filter-form').submit()">
+                <option value="">-- All Statuses --</option>
+                <option value="Pending" {% if selected_status == 'Pending' %}selected{% endif %}>Pending</option>
+                <option value="Approved" {% if selected_status == 'Approved' %}selected{% endif %}>Approved</option>
+                <option value="Dispatched" {% if selected_status == 'Dispatched' %}selected{% endif %}>Dispatched</option>
+                <option value="Delivered" {% if selected_status == 'Delivered' %}selected{% endif %}>Delivered</option>
+                <option value="Rejected" {% if selected_status == 'Rejected' %}selected{% endif %}>Rejected</option>
+            </select>
+            
+            <!-- Priority Filter -->
+            <select name="priority" class="filter-select" onchange="document.getElementById('report-filter-form').submit()">
+                <option value="">-- All Priorities --</option>
+                <option value="Low" {% if selected_priority == 'Low' %}selected{% endif %}>Low</option>
+                <option value="Medium" {% if selected_priority == 'Medium' %}selected{% endif %}>Medium</option>
+                <option value="High" {% if selected_priority == 'High' %}selected{% endif %}>High</option>
+                <option value="Emergency" {% if selected_priority == 'Emergency' %}selected{% endif %}>Emergency</option>
+            </select>
+        </div>
+        
+        <div style="display: flex; gap: 10px;">
+            <button type="button" class="btn btn-outline btn-sm" onclick="exportTableToCSV('reports-table', 'replenishment_report.csv')">
+                📥 Export Excel (CSV)
+            </button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="window.print()">
+                🖨️ Print Report (PDF)
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Printable Report Panel -->
+<div class="panel">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 2px solid var(--primary); padding-bottom: 15px;">
+        <div>
+            <h2 style="margin: 0; color: var(--primary);">Mandal stock Replenishment Report</h2>
+            <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500; display: block; margin-top: 5px;">
+                Generated on: July 10, 2026 | Scope: 
+                {% if selected_village %}{{ selected_village }}{% else %}All Villages{% endif %}
+            </span>
+        </div>
+        <div style="text-align: right;">
+            <strong style="color: var(--text-main); font-size: 1.1rem; display: block;">Shamshabad Mandal Hospital</strong>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Ministry of Health, Telangana</span>
+        </div>
+    </div>
+    
+    <div class="table-wrapper">
+        <table class="custom-table" id="reports-table">
+            <thead>
+                <tr>
+                    <th>Req ID</th>
+                    <th>ASHA Worker</th>
+                    <th>Village</th>
+                    <th>Medicine</th>
+                    <th>Requested Qty</th>
+                    <th>Priority</th>
+                    <th>Request Date</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if reports %}
+                    {% for req in reports %}
+                        <tr>
+                            <td><strong>#REQ-{{ req.id }}</strong></td>
+                            <td>{{ req.asha_worker }}</td>
+                            <td>{{ req.village }}</td>
+                            <td>{{ req.medicine_name }}</td>
+                            <td>{{ req.requested_quantity }} {{ req.unit }}</td>
+                            <td>
+                                {% if req.priority == 'Low' %}
+                                    <span class="status-badge" style="background-color: #f1f5f9; color: #475569;">Low</span>
+                                {% elif req.priority == 'Medium' %}
+                                    <span class="status-badge" style="background-color: #eff6ff; color: #2563eb;">Medium</span>
+                                {% elif req.priority == 'High' %}
+                                    <span class="status-badge" style="background-color: #fff7ed; color: #ea580c;">High</span>
+                                {% elif req.priority == 'Emergency' %}
+                                    <span class="status-badge" style="background-color: #fef2f2; color: #dc2626; font-weight: bold;">Emergency</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ req.request_date }}</td>
+                            <td>
+                                {% if req.status == 'Pending' %}
+                                    <span class="status-badge" style="background-color: #fef3c7; color: #d97706;">Pending</span>
+                                {% elif req.status == 'Approved' %}
+                                    <span class="status-badge" style="background-color: #dbeafe; color: #1d4ed8;">Approved</span>
+                                {% elif req.status == 'Dispatched' %}
+                                    <span class="status-badge" style="background-color: #fae8ff; color: #a21caf;">Dispatched</span>
+                                {% elif req.status == 'Delivered' %}
+                                    <span class="status-badge" style="background-color: #d1fae5; color: #065f46;">Delivered</span>
+                                {% elif req.status == 'Rejected' %}
+                                    <span class="status-badge" style="background-color: #fee2e2; color: #991b1b;">Rejected</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                            No replenishment records match the selected filters.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
