@@ -24,31 +24,54 @@ def asha_dashboard():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # 1. Total Medicines (count of unique products in village)
+    # 1. Total Medicines
     cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = ?;", (village,))
     total_medicines = cursor.fetchone()[0]
     
-    # 2. Available Stock (sum of quantities across all medicines in village)
+    # 2. Available Stock
     cursor.execute("SELECT SUM(quantity) FROM medicines WHERE village = ?;", (village,))
     available_stock = cursor.fetchone()[0] or 0
     
-    # 3. Low Stock Medicines (quantity < minimum_stock)
+    # 3. Low Stock Medicines
     cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = ? AND quantity < minimum_stock AND expiry_date > ?;", (village, today))
     low_stock_count = cursor.fetchone()[0]
     
-    # 4. Expired Medicines (expiry_date <= today)
+    # 4. Expired Medicines
     cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = ? AND expiry_date <= ?;", (village, today))
     expired_count = cursor.fetchone()[0]
     
-    # 5. Medicines Expiring Soon (expiry_date > today and <= today + 30 days)
+    # 5. Medicines Expiring Soon
     cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = ? AND expiry_date > ? AND expiry_date <= ?;", (village, today, expiring_soon_date))
     expiring_soon_count = cursor.fetchone()[0]
     
-    # 6. Medicines Distributed Today (sum of distributed quantity today)
+    # 6. Medicines Distributed Today
     cursor.execute("SELECT SUM(quantity) FROM distributions WHERE village = ? AND distributed_date = ?;", (village, today))
     distributed_today = cursor.fetchone()[0] or 0
+
+    # Phase 2 metrics
+    # 7. Pending Requests
+    cursor.execute("SELECT COUNT(*) FROM medicine_requests WHERE village = ? AND status = 'Pending';", (village,))
+    pending_requests_count = cursor.fetchone()[0]
     
-    # Fetch alerts to display on dashboard
+    # 8. Approved Requests
+    cursor.execute("SELECT COUNT(*) FROM medicine_requests WHERE village = ? AND status = 'Approved';", (village,))
+    approved_requests_count = cursor.fetchone()[0]
+    
+    # 9. Delivered Requests
+    cursor.execute("SELECT COUNT(*) FROM medicine_requests WHERE village = ? AND status = 'Delivered';", (village,))
+    delivered_requests_count = cursor.fetchone()[0]
+    
+    # Chart Data 1: Requests by Priority
+    cursor.execute("SELECT priority, COUNT(*) as count FROM medicine_requests WHERE village = ? GROUP BY priority;", (village,))
+    priority_rows = cursor.fetchall()
+    priority_data = {row['priority']: row['count'] for row in priority_rows}
+    
+    # Chart Data 2: Requests by Status
+    cursor.execute("SELECT status, COUNT(*) as count FROM medicine_requests WHERE village = ? GROUP BY status;", (village,))
+    status_rows = cursor.fetchall()
+    status_data = {row['status']: row['count'] for row in status_rows}
+    
+    # Fetch alerts
     cursor.execute("""
         SELECT id, medicine_name, quantity, minimum_stock, expiry_date 
         FROM medicines 
@@ -79,7 +102,11 @@ def asha_dashboard():
                 'type': 'warning',
                 'message': f"LOW STOCK: '{name}' quantity ({qty}) is below minimum level ({min_stock})."
             })
-            
+    priority_labels = list(priority_data.keys())
+    priority_values = list(priority_data.values())
+    status_labels = list(status_data.keys())
+    status_values = list(status_data.values())
+
     conn.close()
     
     return render_template('asha_dashboard.html',
@@ -89,6 +116,13 @@ def asha_dashboard():
                            expired_count=expired_count,
                            expiring_soon_count=expiring_soon_count,
                            distributed_today=distributed_today,
+                           pending_requests_count=pending_requests_count,
+                           approved_requests_count=approved_requests_count,
+                           delivered_requests_count=delivered_requests_count,
+                           priority_labels=priority_labels,
+                           priority_values=priority_values,
+                           status_labels=status_labels,
+                           status_values=status_values,
                            alerts=alerts)
 
 @asha_bp.route('/inventory')
@@ -403,3 +437,205 @@ def transactions():
     conn.close()
     
     return render_template('transactions.html', transactions=tx_list, search=search_query)
+
+@asha_bp.route('/request/new', methods=['GET', 'POST'])
+@asha_required
+def request_new():
+    village = session['village']
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    if request.method == 'POST':
+        medicine_id = request.form.get('medicine_id', '').strip()
+        requested_qty = request.form.get('requested_quantity', '').strip()
+        reason = request.form.get('reason', '').strip()
+        priority = request.form.get('priority', '').strip()
+        
+        if not medicine_id or not requested_qty or not reason or not priority:
+            flash("All fields are required.", "error")
+            cursor.execute("SELECT id, medicine_name, quantity, unit FROM medicines WHERE village = ?;", (village,))
+            medicines = cursor.fetchall()
+            conn.close()
+            return render_template('request_form.html', medicines=medicines, form_data=request.form)
+            
+        try:
+            qty = int(requested_qty)
+            if qty <= 0:
+                raise ValueError()
+        except ValueError:
+            flash("Requested quantity must be a positive integer.", "error")
+            cursor.execute("SELECT id, medicine_name, quantity, unit FROM medicines WHERE village = ?;", (village,))
+            medicines = cursor.fetchall()
+            conn.close()
+            return render_template('request_form.html', medicines=medicines, form_data=request.form)
+            
+        # Get current stock
+        cursor.execute("SELECT quantity, medicine_name FROM medicines WHERE id = ? AND village = ?;", (medicine_id, village))
+        med = cursor.fetchone()
+        if not med:
+            flash("Selected medicine not found in your inventory.", "error")
+            cursor.execute("SELECT id, medicine_name, quantity, unit FROM medicines WHERE village = ?;", (village,))
+            medicines = cursor.fetchall()
+            conn.close()
+            return render_template('request_form.html', medicines=medicines, form_data=request.form)
+            
+        current_stock = med['quantity']
+        med_name = med['medicine_name']
+        
+        # Save request
+        today_date = datetime.now().strftime("%Y-%m-%d")
+        cursor.execute("""
+            INSERT INTO medicine_requests (asha_worker, village, medicine_id, current_stock, requested_quantity, reason, priority, status, request_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', ?);
+        """, (session['name'], village, medicine_id, current_stock, qty, reason, priority, today_date))
+        
+        # Add notification for Mandal Hospital
+        cursor.execute("""
+            INSERT INTO notifications (user_role, village, message, is_read, created_at)
+            VALUES ('mandal', NULL, ?, 0, ?);
+        """, (f"New medicine request submitted by {session['name']} ({village}) for {med_name}.", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        
+        conn.commit()
+        conn.close()
+        
+        flash("Replenishment request submitted successfully.", "success")
+        return redirect(url_for('asha.request_history'))
+        
+    # GET: Pre-populate medicine list
+    pre_selected_id = request.args.get('medicine_id', '')
+    cursor.execute("SELECT id, medicine_name, quantity, unit FROM medicines WHERE village = ?;", (village,))
+    medicines = cursor.fetchall()
+    conn.close()
+    
+    return render_template('request_form.html', medicines=medicines, pre_selected_id=pre_selected_id)
+
+@asha_bp.route('/request/history')
+@asha_required
+def request_history():
+    village = session['village']
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT r.*, m.medicine_name, m.unit, m.batch_number
+        FROM medicine_requests r
+        JOIN medicines m ON r.medicine_id = m.id
+        WHERE r.village = ?
+        ORDER BY r.request_date DESC, r.id DESC;
+    """, (village,))
+    requests_list = cursor.fetchall()
+    conn.close()
+    
+    return render_template('request_history.html', requests=requests_list)
+
+@asha_bp.route('/request/view/<int:req_id>')
+@asha_required
+def request_view(req_id):
+    village = session['village']
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Verify request belongs to village
+    cursor.execute("""
+        SELECT r.*, m.medicine_name, m.unit, m.batch_number, m.expiry_date
+        FROM medicine_requests r
+        JOIN medicines m ON r.medicine_id = m.id
+        WHERE r.id = ? AND r.village = ?;
+    """, (req_id, village))
+    req = cursor.fetchone()
+    
+    if not req:
+        conn.close()
+        flash("Request not found.", "error")
+        return redirect(url_for('asha.request_history'))
+        
+    # Get dispatch details if applicable
+    cursor.execute("SELECT * FROM dispatches WHERE request_id = ?;", (req_id,))
+    dispatch = cursor.fetchone()
+    conn.close()
+    
+    return render_template('request_view.html', request=req, dispatch=dispatch)
+
+@asha_bp.route('/delivery/confirm/<int:req_id>', methods=['POST'])
+@asha_required
+def delivery_confirm(req_id):
+    village = session['village']
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Verify request
+    cursor.execute("""
+        SELECT r.*, m.medicine_name, m.unit 
+        FROM medicine_requests r
+        JOIN medicines m ON r.medicine_id = m.id
+        WHERE r.id = ? AND r.village = ? AND r.status = 'Dispatched';
+    """, (req_id, village))
+    req = cursor.fetchone()
+    
+    if not req:
+        conn.close()
+        flash("Invalid request or request is not in Dispatched state.", "error")
+        return redirect(url_for('asha.request_history'))
+        
+    # Get dispatched quantity
+    cursor.execute("SELECT quantity_sent FROM dispatches WHERE request_id = ?;", (req_id,))
+    disp = cursor.fetchone()
+    if not disp:
+        conn.close()
+        flash("Dispatch details not found for this request.", "error")
+        return redirect(url_for('asha.request_history'))
+        
+    qty_sent = disp['quantity_sent']
+    med_id = req['medicine_id']
+    med_name = req['medicine_name']
+    
+    # 1. Update request status to 'Delivered'
+    cursor.execute("UPDATE medicine_requests SET status = 'Delivered' WHERE id = ?;", (req_id,))
+    
+    # 2. Increase stock of the medicine
+    cursor.execute("UPDATE medicines SET quantity = quantity + ? WHERE id = ?;", (qty_sent, med_id))
+    
+    # 3. Log transaction
+    cursor.execute("""
+        INSERT INTO transactions (medicine_id, action, quantity, remarks, created_at)
+        VALUES (?, 'Added', ?, ?, ?);
+    """, (med_id, qty_sent, f"Stock replenished via request ID {req_id}.", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    
+    # 4. Insert notifications
+    cursor.execute("""
+        INSERT INTO notifications (user_role, village, message, is_read, created_at)
+        VALUES ('asha', ?, ?, 0, ?);
+    """, (village, f"Your request for '{med_name}' has been DELIVERED.", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    
+    cursor.execute("""
+        INSERT INTO notifications (user_role, village, message, is_read, created_at)
+        VALUES ('mandal', NULL, ?, 0, ?);
+    """, (f"Delivery confirmed by {session['name']} ({village}) for {med_name}.", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    
+    conn.commit()
+    conn.close()
+    
+    flash(f"Delivery confirmed. Stock for '{med_name}' increased by {qty_sent}.", "success")
+    return redirect(url_for('asha.request_view', req_id=req_id))
+
+@asha_bp.route('/notifications')
+@asha_required
+def notifications():
+    village = session['village']
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Fetch notifications
+    cursor.execute("""
+        SELECT * FROM notifications 
+        WHERE user_role = 'asha' AND village = ?
+        ORDER BY created_at DESC;
+    """, (village,))
+    notif_list = cursor.fetchall()
+    
+    # Mark as read
+    cursor.execute("UPDATE notifications SET is_read = 1 WHERE user_role = 'asha' AND village = ?;", (village,))
+    conn.commit()
+    conn.close()
+    
+    return render_template('notifications.html', notifications=notif_list)

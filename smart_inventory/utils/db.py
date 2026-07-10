@@ -74,6 +74,48 @@ def init_db():
     );
     """)
     
+    # 6. Medicine Requests Table (Phase 2)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS medicine_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        asha_worker TEXT NOT NULL,
+        village TEXT NOT NULL,
+        medicine_id INTEGER NOT NULL,
+        current_stock INTEGER NOT NULL,
+        requested_quantity INTEGER NOT NULL,
+        reason TEXT NOT NULL,
+        priority TEXT NOT NULL,
+        status TEXT NOT NULL, -- Pending, Approved, Rejected, Dispatched, Delivered
+        rejection_reason TEXT,
+        request_date TEXT NOT NULL,
+        FOREIGN KEY(medicine_id) REFERENCES medicines(id) ON DELETE CASCADE
+    );
+    """)
+
+    # 7. Dispatches Table (Phase 2)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS dispatches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        request_id INTEGER NOT NULL,
+        quantity_sent INTEGER NOT NULL,
+        dispatch_date TEXT NOT NULL,
+        delivery_notes TEXT,
+        FOREIGN KEY(request_id) REFERENCES medicine_requests(id) ON DELETE CASCADE
+    );
+    """)
+
+    # 8. Notifications Table (Phase 2)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_role TEXT NOT NULL, -- asha, mandal
+        village TEXT,            -- NULL for mandal
+        message TEXT NOT NULL,
+        is_read INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL
+    );
+    """)
+    
     conn.commit()
     
     # Seed data if tables are empty
@@ -165,6 +207,75 @@ def seed_mock_data(conn):
     INSERT INTO transactions (medicine_id, action, quantity, remarks, created_at)
     VALUES (?, 'Distributed', 10, 'Distributed 10 tablets to Saraswathi Amma in Rampur.', ?);
     """, (para_id, today.strftime("%Y-%m-%d %H:%M:%S")))
+
+    # Seed Phase 2 Mock Data (Requests, Dispatches, Notifications)
+    # Get medicine IDs for seeding requests
+    cursor.execute("SELECT id, quantity FROM medicines WHERE medicine_name='Amoxicillin 250mg' AND village='Rampur';")
+    amox_row = cursor.fetchone()
+    amox_id, amox_qty = amox_row['id'], amox_row['quantity']
+    
+    cursor.execute("SELECT id, quantity FROM medicines WHERE medicine_name='Cough Syrup' AND village='Rampur';")
+    cough_row = cursor.fetchone()
+    cough_id, cough_qty = cough_row['id'], cough_row['quantity']
+    
+    cursor.execute("SELECT id, quantity FROM medicines WHERE medicine_name='ORS Sachet' AND village='Chandanpur';")
+    ors_row = cursor.fetchone()
+    ors_id, ors_qty = ors_row['id'], ors_row['quantity']
+    
+    cursor.execute("SELECT id, quantity FROM medicines WHERE medicine_name='Iron & Folic Acid' AND village='Sompur';")
+    iron_row = cursor.fetchone()
+    iron_id, iron_qty = iron_row['id'], iron_row['quantity']
+
+    # 1. Pending Request (Lakshmi Devi, Rampur, Amoxicillin 250mg)
+    cursor.execute("""
+        INSERT INTO medicine_requests (asha_worker, village, medicine_id, current_stock, requested_quantity, reason, priority, status, request_date)
+        VALUES ('Lakshmi Devi', 'Rampur', ?, ?, 100, 'Low stock, high demand due to local viral flu cases.', 'High', 'Pending', ?);
+    """, (amox_id, amox_qty, today.strftime("%Y-%m-%d")))
+    req_pending_id = cursor.lastrowid
+    
+    # 2. Approved Request (Lakshmi Devi, Rampur, Cough Syrup)
+    cursor.execute("""
+        INSERT INTO medicine_requests (asha_worker, village, medicine_id, current_stock, requested_quantity, reason, priority, status, request_date)
+        VALUES ('Lakshmi Devi', 'Rampur', ?, ?, 30, 'Cough syrup inventory running below threshold safety limit.', 'Medium', 'Approved', ?);
+    """, (cough_id, cough_qty, (today - timedelta(days=2)).strftime("%Y-%m-%d")))
+    
+    # 3. Dispatched Request (Kavitha Reddy, Chandanpur, ORS Sachet)
+    cursor.execute("""
+        INSERT INTO medicine_requests (asha_worker, village, medicine_id, current_stock, requested_quantity, reason, priority, status, request_date)
+        VALUES ('Kavitha Reddy', 'Chandanpur', ?, ?, 150, 'Replenish expired stock for summer dehydration prep.', 'Emergency', 'Dispatched', ?);
+    """, (ors_id, ors_qty, (today - timedelta(days=3)).strftime("%Y-%m-%d")))
+    req_dispatch_id = cursor.lastrowid
+    
+    cursor.execute("""
+        INSERT INTO dispatches (request_id, quantity_sent, dispatch_date, delivery_notes)
+        VALUES (?, 150, ?, 'Dispatched in emergency vehicle AP-09-V-1234. Expected delivery by evening.');
+    """, (req_dispatch_id, (today - timedelta(days=1)).strftime("%Y-%m-%d")))
+
+    # 4. Delivered Request (Anitha Kurma, Sompur, Iron & Folic Acid)
+    cursor.execute("""
+        INSERT INTO medicine_requests (asha_worker, village, medicine_id, current_stock, requested_quantity, reason, priority, status, request_date)
+        VALUES ('Anitha Kurma', 'Sompur', ?, ?, 50, 'Monthly supply for pregnant mothers nutrition program.', 'Medium', 'Delivered', ?);
+    """, (iron_id, iron_qty, (today - timedelta(days=5)).strftime("%Y-%m-%d")))
+    req_delivered_id = cursor.lastrowid
+    
+    cursor.execute("""
+        INSERT INTO dispatches (request_id, quantity_sent, dispatch_date, delivery_notes)
+        VALUES (?, 50, ?, 'Delivered successfully via routine distribution van.');
+    """, (req_delivered_id, (today - timedelta(days=4)).strftime("%Y-%m-%d")))
+
+    # Seed Notifications
+    notifs = [
+        # ASHA notifications (Rampur/Chandanpur/Sompur)
+        ('asha', 'Rampur', "Your request for Cough Syrup has been APPROVED by Mandal Hospital.", 0, (today - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")),
+        ('asha', 'Chandanpur', "Medicines for request 'ORS Sachet' have been DISPATCHED (Vehicle: AP-09-V-1234).", 0, today.strftime("%Y-%m-%d %H:%M:%S")),
+        ('asha', 'Sompur', "Your request for Iron & Folic Acid has been DELIVERED.", 1, (today - timedelta(days=3)).strftime("%Y-%m-%d %H:%M:%S")),
+        
+        # Mandal notifications
+        ('mandal', None, "New medicine request submitted by Kavitha Reddy (Chandanpur) for ORS Sachet.", 1, (today - timedelta(days=3)).strftime("%Y-%m-%d %H:%M:%S")),
+        ('mandal', None, "New medicine request submitted by Lakshmi Devi (Rampur) for Amoxicillin 250mg.", 0, today.strftime("%Y-%m-%d %H:%M:%S")),
+        ('mandal', None, "Delivery confirmed by Anitha Kurma (Sompur) for Iron & Folic Acid.", 1, (today - timedelta(days=3)).strftime("%Y-%m-%d %H:%M:%S"))
+    ]
+    cursor.executemany("INSERT INTO notifications (user_role, village, message, is_read, created_at) VALUES (?, ?, ?, ?, ?);", notifs)
 
     conn.commit()
     print("Database seeding completed.")
