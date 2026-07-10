@@ -210,11 +210,18 @@ export function ensureLeafletLoaded() {
 // ── Persistent map instance cache (by container ID) ──────────
 const _mapInstances = {};
 
-export async function renderUnifiedMap(containerId, center, zoom, markers = []) {
+export async function renderUnifiedMap(containerId, center, zoom, markers = [], origin = null, destination = null) {
   const container = document.getElementById(containerId);
   if (!container) return null;
 
-  // 1. Fetch maps key config (cached via module-level promise)
+  if (origin && destination) {
+    const src = `https://maps.google.com/maps?saddr=${origin.lat},${origin.lng}&daddr=${destination.lat},${destination.lng}&t=&z=14&ie=UTF8&iwloc=&output=embed`;
+    container.innerHTML = `
+      <iframe src="${src}" style="width:100%; height:100%; border:0; border-radius:8px;" allowfullscreen="" loading="lazy"></iframe>
+    `;
+    return { type: 'iframe' };
+  }
+
   let key = '';
   try {
     const config = await apiGet('/api/rescue/config/maps-key');
@@ -225,7 +232,7 @@ export async function renderUnifiedMap(containerId, center, zoom, markers = []) 
 
   const isDummy = !key || key.toLowerCase().includes('dummy') || key === 'undefined';
 
-  // ── EXISTING MAP: just update markers ─────────────────────
+  // 1. Fetch maps key config (cached via module-level promise)
   const existing = _mapInstances[containerId];
   if (existing) {
     // Remove old markers
@@ -932,7 +939,7 @@ function renderResultPage(e, root) {
       }
 
 
-      const mapResult = await renderUnifiedMap('result-map', incidentPos, 13, markers);
+      const mapResult = await renderUnifiedMap('result-map', incidentPos, 13, markers, teamPos, incidentPos);
 
       // Update status text in UI
       const statusTextEl = document.getElementById('result-status-text');
@@ -1215,7 +1222,7 @@ function renderTrackingPage(data, root) {
       }
 
 
-      const mapResult = await renderUnifiedMap('tracker-map', incidentPos, 13, markers);
+      const mapResult = await renderUnifiedMap('tracker-map', incidentPos, 13, markers, teamPos, incidentPos);
 
       // Update status text
       const statusTextEl = document.getElementById('tracker-status-text');
@@ -1266,159 +1273,60 @@ let pendingAction    = null;
 let controlRoomMap = null;
 let controlRoomMarkers = [];
 
+let selectedControlRoomEid = null;
+
 function updateControlRoomMap() {
   const closedStatuses = ['Case Closed', 'Mission Completed', 'Rescue Completed'];
   const activeEmergencies = controlData.filter(e => e.lat && e.lng && !closedStatuses.includes(e.status));
   
   const center = { lat: 17.385044, lng: 78.486671 }; // Hyderabad Center
-  const markers = [];
 
-  activeEmergencies.forEach(e => {
-    const markerColor = {
-      'Critical': '#ef4444',
-      'High':     '#f97316',
-      'Medium':   '#eab308',
-      'Low':      '#22c55e'
-    }[e.severity] || '#3b82f6';
+  if (!selectedControlRoomEid && activeEmergencies.length > 0) {
+    selectedControlRoomEid = activeEmergencies[0].emergency_id;
+  }
 
-    const assignedUnit = e.nearest_rescue_team || e.recommended_team;
-    
-    // 1. Incident Location Marker
-    const infoContent = `
-      <div style="color:#000000; font-family:sans-serif; padding:0.5rem; max-width:250px; line-height:1.4;">
-        <h4 style="margin:0 0 0.25rem 0; font-size:0.95rem; font-weight:700;">${e.emergency_id}</h4>
-        <div style="font-size:0.85rem; font-weight:700; color:${markerColor}; margin-bottom:0.4rem;">${e.incident_type} (${e.severity})</div>
-        <div style="font-size:0.8rem; margin-bottom:0.4rem;"><strong>Status:</strong> ${e.status}</div>
-        <div style="font-size:0.8rem; margin-bottom:0.4rem;"><strong>Assigned Team:</strong> ${assignedUnit || 'Unassigned'}</div>
-        <div style="font-size:0.78rem; background:#f4f4f5; padding:0.35rem; border-radius:4px; color:#4b5563; margin-bottom:0.5rem;"><strong>AI Summary:</strong> ${e.ai_decision_summary || 'No summary available.'}</div>
-        <div style="margin-top: 0.5rem;">
-          <a href="https://www.google.com/maps/dir/?api=1&destination=${e.lat},${e.lng}" target="_blank" class="team-btn" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8); border:none; text-decoration:none; color:#ffffff; font-size:0.75rem; font-weight:700; display:flex; align-items:center; justify-content:center; gap:0.3rem; padding:0.4rem 0.8rem; cursor:pointer; border-radius:4px; text-align:center;">
-            🚗 Navigate to Scene
-          </a>
-        </div>
-      </div>
-    `;
+  const selectedEmergency = activeEmergencies.find(e => e.emergency_id === selectedControlRoomEid);
 
-    markers.push({
-      pos: { lat: parseFloat(e.lat), lng: parseFloat(e.lng) },
-      title: `${e.emergency_id} - ${e.incident_type}`,
-      color: markerColor,
-      info: infoContent
-    });
+  if (selectedEmergency) {
+    const assignedUnit = selectedEmergency.nearest_rescue_team || selectedEmergency.recommended_team;
+    const teamBase = TEAM_BASES[assignedUnit] || TEAM_BASES[selectedEmergency.recommended_team] || { lat: 17.3850, lng: 78.4867, name: 'Central Command Base', icon: '🚒' };
+    const incidentPos = { lat: parseFloat(selectedEmergency.lat), lng: parseFloat(selectedEmergency.lng) };
+    const statusIndex = STATUS_MAPPING[selectedEmergency.status] ?? 0;
 
-    // 2. Dispatched Team & Base station tracking on control map
-    const statusIndex = STATUS_MAPPING[e.status] ?? 0;
-    if (statusIndex >= 2 && assignedUnit) {
-      const teamBase = TEAM_BASES[assignedUnit] || TEAM_BASES[e.recommended_team] || { lat: 17.3850, lng: 78.4867, name: 'Central Command Base', icon: '🚒' };
-      const incidentPos = { lat: parseFloat(e.lat), lng: parseFloat(e.lng) };
+    let teamPos = { ...teamBase };
+    let isRealGPS = false;
 
-      let teamPos = { ...teamBase };
-      let progressFraction = 0;
-      let isRealGPS = false;
-
-      if (e.team_lat && e.team_lng && statusIndex >= 2 && statusIndex < 7) {
-        teamPos = { lat: parseFloat(e.team_lat), lng: parseFloat(e.team_lng) };
-        isRealGPS = true;
-        const totalD = haversineKm(teamBase, incidentPos);
-        const coveredD = haversineKm(teamBase, teamPos);
-        progressFraction = totalD > 0 ? Math.min(coveredD / totalD, 0.95) : 0.5;
-      }
-
-      if (statusIndex === 4 && !isRealGPS) {
-        const updatedAt = e.updated_at ? new Date(e.updated_at) : new Date();
-        const etaMs = (e.response_time_minutes || 15) * 60 * 1000;
-        const elapsedMs = Date.now() - updatedAt.getTime();
-        progressFraction = Math.min(elapsedMs / etaMs, 0.92);
-        teamPos = lerpPos(teamBase, incidentPos, progressFraction);
-      } else if (statusIndex >= 5 && !isRealGPS) {
-        teamPos = { ...incidentPos };
-      }
-
-      // Add Base Station Marker
-      markers.push({
-        pos: teamBase,
-        title: `🏢 Base: ${teamBase.name}`,
-        color: '#3b82f6',
-        info: `
-          <div style="color:#000000; font-family:sans-serif; padding:0.5rem; max-width:220px; line-height:1.4;">
-            <h4 style="margin:0 0 0.25rem 0; font-size:0.9rem; font-weight:700; color:#3b82f6;">🏢 Base Station</h4>
-            <div style="font-size:0.8rem; margin-bottom:0.25rem;"><strong>Name:</strong> ${teamBase.name}</div>
-            <div style="font-size:0.8rem;"><strong>Dispatched to:</strong> ${e.emergency_id}</div>
-          </div>
-        `
-      });
-
-      // Add Vehicle Marker
-      markers.push({
-        pos: teamPos,
-        title: `${teamBase.icon} ${assignedUnit}`,
-        icon: teamBase.icon,
-        info: `
-          <div style="color:#000000; font-family:sans-serif; padding:0.5rem; max-width:220px; line-height:1.4;">
-            <h4 style="margin:0 0 0.25rem 0; font-size:0.9rem; font-weight:700; color:#22c55e;">🚒 En Route to ${e.emergency_id}${isRealGPS ? ' (Live GPS)' : ''}</h4>
-            <div style="font-size:0.8rem; margin-bottom:0.25rem;"><strong>Unit:</strong> ${assignedUnit}</div>
-            <div style="font-size:0.8rem; margin-bottom:0.25rem;"><strong>Driver:</strong> ${e.team_driver || '—'}</div>
-            <div style="font-size:0.8rem;"><strong>Leader:</strong> ${e.team_leader || '—'}</div>
-          </div>
-        `
-      });
+    if (selectedEmergency.team_lat && selectedEmergency.team_lng && statusIndex >= 2 && statusIndex < 7) {
+      teamPos = { lat: parseFloat(selectedEmergency.team_lat), lng: parseFloat(selectedEmergency.team_lng) };
+      isRealGPS = true;
     }
-  });
 
-  setTimeout(async () => {
-    const mapResult = await renderUnifiedMap('map', center, 12, markers);
+    if (statusIndex === 4 && !isRealGPS) {
+      const updatedAt = selectedEmergency.updated_at ? new Date(selectedEmergency.updated_at) : new Date();
+      const etaMs = (selectedEmergency.response_time_minutes || 15) * 60 * 1000;
+      const elapsedMs = Date.now() - updatedAt.getTime();
+      const progressFraction = Math.min(elapsedMs / etaMs, 0.92);
+      teamPos = lerpPos(teamBase, incidentPos, progressFraction);
+    } else if (statusIndex >= 5 && !isRealGPS) {
+      teamPos = { ...incidentPos };
+    }
 
-    if (mapResult && mapResult.addPolyline) {
-      activeEmergencies.forEach(e => {
-        const statusIndex = STATUS_MAPPING[e.status] ?? 0;
-        const assignedUnit = e.nearest_rescue_team || e.recommended_team;
-        if (statusIndex >= 2 && assignedUnit) {
-          const teamBase = TEAM_BASES[assignedUnit] || TEAM_BASES[e.recommended_team] || { lat: 17.3850, lng: 78.4867, name: 'Central Command Base', icon: '🚒' };
-          const incidentPos = { lat: parseFloat(e.lat), lng: parseFloat(e.lng) };
+    renderUnifiedMap('map', incidentPos, 12, [], teamPos, incidentPos);
 
-          let teamPos = { ...teamBase };
-          let progressFraction = 0;
-          let isRealGPS = false;
-
-          if (e.team_lat && e.team_lng && statusIndex >= 2 && statusIndex < 7) {
-            teamPos = { lat: parseFloat(e.team_lat), lng: parseFloat(e.team_lng) };
-            isRealGPS = true;
-            const totalD = haversineKm(teamBase, incidentPos);
-            const coveredD = haversineKm(teamBase, teamPos);
-            progressFraction = totalD > 0 ? Math.min(coveredD / totalD, 0.95) : 0.5;
-          }
-
-          if (statusIndex === 4 && !isRealGPS) {
-            const updatedAt = e.updated_at ? new Date(e.updated_at) : new Date();
-            const etaMs = (e.response_time_minutes || 15) * 60 * 1000;
-            const elapsedMs = Date.now() - updatedAt.getTime();
-            progressFraction = Math.min(elapsedMs / etaMs, 0.92);
-            teamPos = lerpPos(teamBase, incidentPos, progressFraction);
-          } else if (statusIndex >= 5 && !isRealGPS) {
-            teamPos = { ...incidentPos };
-          }
-
-          // Draw dashed route line
-          mapResult.addPolyline(
-            [[teamBase.lat, teamBase.lng], [incidentPos.lat, incidentPos.lng]],
-            mapResult.type === 'leaflet'
-              ? { color: '#fb923c', weight: 3, dashArray: '6, 8', opacity: 0.75 }
-              : { strokeColor: '#fb923c', strokeOpacity: 0.6, strokeWeight: 3, geodesic: true }
-          );
-
-          // Draw solid progress line
-          if (statusIndex === 4 && progressFraction > 0) {
-            mapResult.addPolyline(
-              [[teamBase.lat, teamBase.lng], [teamPos.lat, teamPos.lng]],
-              mapResult.type === 'leaflet'
-                ? { color: '#22c55e', weight: 4, opacity: 0.9 }
-                : { strokeColor: '#22c55e', strokeOpacity: 0.9, strokeWeight: 4, geodesic: true }
-            );
-          }
+    // Sync selected class in DOM
+    setTimeout(() => {
+      document.querySelectorAll('.control-emergency-card').forEach(el => {
+        if (el.dataset.eid === selectedControlRoomEid) {
+          el.classList.add('selected-card');
+        } else {
+          el.classList.remove('selected-card');
         }
       });
-    }
-  }, 100);
+    }, 50);
+
+  } else {
+    renderUnifiedMap('map', center, 12, []);
+  }
 }
 
 
@@ -1544,6 +1452,20 @@ function renderEmergencies(root, data) {
 
   root.innerHTML = data.map(e => buildEmergencyCard(e)).join('');
   attachCardActions();
+
+  // Attach card selection click listeners
+  document.querySelectorAll('.control-emergency-card').forEach(card => {
+    card.addEventListener('click', (ev) => {
+      if (ev.target.tagName === 'BUTTON' || ev.target.tagName === 'SELECT' || ev.target.tagName === 'A' || ev.target.tagName === 'OPTION') {
+        return;
+      }
+      const eid = card.dataset.eid;
+      if (eid) {
+        selectedControlRoomEid = eid;
+        updateControlRoomMap();
+      }
+    });
+  });
 }
 
 function buildEmergencyCard(e) {
@@ -1636,7 +1558,7 @@ function buildEmergencyCard(e) {
   }
 
   return `
-    <div class="emergency-card sev-${sevClass}">
+    <div class="emergency-card sev-${sevClass} control-emergency-card" data-eid="${e.emergency_id}">
       <div class="ec-top">
         <div>
           <div class="ec-id-row">

@@ -750,6 +750,12 @@ textarea.form-control {
   background: rgba(245, 158, 11, 0.03);
 }
 
+.emergency-card.selected-card {
+  border-color: var(--rescue-primary) !important;
+  background: rgba(245, 158, 11, 0.08) !important;
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.25) !important;
+}
+
 .ec-top {
   display: flex;
   align-items: flex-start;
