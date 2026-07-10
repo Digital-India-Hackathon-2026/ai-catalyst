@@ -5,6 +5,7 @@ from routes.auth import auth_bp
 from routes.asha import asha_bp
 from routes.mandal import mandal_bp
 from routes.chatbot import chatbot_bp
+from routes.polio import polio_bp
 
 def create_app():
     # Set templates and static folder paths relative to this file
@@ -22,6 +23,7 @@ def create_app():
     app.register_blueprint(asha_bp)
     app.register_blueprint(mandal_bp)
     app.register_blueprint(chatbot_bp)
+    app.register_blueprint(polio_bp)
 
     from flask import session
     from utils.db import get_db_connection

@@ -105,6 +105,33 @@ def init_db():
     );
     """)
 
+    # Polio Module Tables
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS polio_children (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        dob TEXT NOT NULL,
+        gender TEXT NOT NULL,
+        parent_name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        village TEXT NOT NULL,
+        address TEXT,
+        aadhaar TEXT
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS polio_vaccinations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        child_id INTEGER NOT NULL,
+        dose_number INTEGER NOT NULL,
+        scheduled_date TEXT NOT NULL,
+        status TEXT NOT NULL, -- Pending, Completed, Overdue
+        administered_date TEXT,
+        FOREIGN KEY(child_id) REFERENCES polio_children(id) ON DELETE CASCADE
+    );
+    """)
+
     # 8. Notifications Table (Phase 2)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS notifications (
