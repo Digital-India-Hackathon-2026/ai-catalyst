@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Track Emergency | Rescue – GovConnect</title>
+  <meta name="description" content="Track your rescue emergency in real time. See the 7-step live status from submission to case closure.">
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/rescue.css">
+</head>
+<body>
+
+  <!-- Shared Navbar -->
+  <div id="navbar-placeholder"></div>
+
+  <!-- Toast -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <main class="container rescue-page">
+
+    <!-- Module Header -->
+    <section class="module-header">
+      <a href="index.html" class="back-link">← Report Emergency</a>
+      <div class="module-title-row">
+        <h1>📡 Track Your Emergency</h1>
+        <span class="module-badge rescue">Rescue &amp; Emergency</span>
+      </div>
+      <p style="color:var(--text-secondary);font-size:0.95rem;margin-top:0.5rem;">
+        Live 7-step status tracker for your rescue emergency. The page will show the current stage of your rescue operation.
+      </p>
+    </section>
+
+    <!-- Quick lookup form (if no ID in URL) -->
+    <div id="track-lookup-form" style="display:none;max-width:480px;margin:0 auto 2rem;">
+      <div class="glass-card">
+        <h3 style="font-size:1rem;margin-bottom:1rem;">🔎 Look Up Emergency</h3>
+        <div class="form-group" style="margin-bottom:0.75rem;">
+          <label for="track-id-input">Emergency ID</label>
+          <input type="text" id="track-id-input" class="form-control" placeholder="e.g. RES-0001">
+        </div>
+        <button id="track-lookup-btn" class="btn" style="background:linear-gradient(135deg,#f59e0b,#fb923c);box-shadow:0 4px 20px rgba(245,158,11,.3);width:100%;justify-content:center;">
+          🔍 Track Emergency
+        </button>
+      </div>
+    </div>
+
+    <!-- Track Root – populated by JS -->
+    <div id="track-root">
+      <div class="empty-state">
+        <div class="empty-icon">⏳</div>
+        <p>Loading tracking data…</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Shared Footer -->
+  <div id="footer-placeholder"></div>
+
+  <script src="../../components/navbar.js"></script>
+  <script src="../../components/footer.js"></script>
+  <script type="module">
+    import { initTrackingPage } from '../../js/rescue.js';
+
+    // Show lookup form if no ID in URL
+    const params = new URLSearchParams(window.location.search);
+    const eid = params.get('id');
+
+    if (!eid) {
+      document.getElementById('track-lookup-form').style.display = 'block';
+      document.getElementById('track-root').innerHTML = '';
+
+      document.getElementById('track-lookup-btn').addEventListener('click', () => {
+        const val = document.getElementById('track-id-input').value.trim();
+        if (val) {
+          window.location.href = `track.html?id=${val}`;
+        }
+      });
+    } else {
+      initTrackingPage();
+    }
+  </script>
+
+</body>
+</html>
