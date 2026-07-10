@@ -842,8 +842,8 @@ function renderTrackingPage(data, root) {
     </div>
   `;
 
-  // Team Tracking Simulation on Map
-  if (e.lat && e.lng) {
+  // Team Tracking Simulation on Map — always show map, use team base as fallback if GPS missing
+  {
     const TEAM_BASES = {
       'Fire Response Unit':             { lat: 17.4374, lng: 78.4482, name: 'Ameerpet Fire Station Unit', icon: '🚒' },
       'Flood Rescue (NDRF)':            { lat: 17.4399, lng: 78.5020, name: 'Secunderabad NDRF Battalion', icon: '🚤' },
@@ -855,7 +855,11 @@ function renderTrackingPage(data, root) {
     };
 
     const teamBase = TEAM_BASES[e.recommended_team] || { lat: 17.3850, lng: 78.4867, name: 'Central Command Base', icon: '🚒' };
-    const incidentPos = { lat: parseFloat(e.lat), lng: parseFloat(e.lng) };
+    // Use GPS if available, otherwise use team base as approximate location
+    const incidentPos = (e.lat && e.lng)
+      ? { lat: parseFloat(e.lat), lng: parseFloat(e.lng) }
+      : { lat: teamBase.lat + 0.005, lng: teamBase.lng + 0.005 }; // ~500m offset from base
+
 
     let teamPos = { ...teamBase };
     let trackerStatus = 'Preparing dispatch...';
