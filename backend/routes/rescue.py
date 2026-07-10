@@ -125,6 +125,37 @@ def run_ai_analysis(description: str) -> dict:
     }
 
 
+SUB_UNITS = {
+    'Fire Response Unit': ['Fire Unit 1', 'Fire Unit 2', 'Fire Unit 3'],
+    'Flood Rescue (NDRF)': ['NDRF Unit A', 'NDRF Unit B'],
+    'SDRF Structural Response Team': ['SDRF Unit 1', 'SDRF Unit 2'],
+    'Hazmat Response Unit': ['Hazmat Unit Alpha', 'Hazmat Unit Beta'],
+    'Emergency Response Team': ['ERT Unit 1', 'ERT Unit 2'],
+    'Electrical Emergency Unit': ['EE Unit A', 'EE Unit B'],
+    'Civic Emergency Team': ['Civic Crew 1', 'Civic Crew 2']
+}
+
+def get_least_loaded_unit(cursor, recommended_team: str) -> str:
+    """
+    Finds the sub-unit under a primary response team with the lowest active emergency workload.
+    """
+    units = SUB_UNITS.get(recommended_team, [recommended_team])
+    if len(units) <= 1:
+        return units[0]
+        
+    workloads = {}
+    for unit in units:
+        cursor.execute("""
+            SELECT COUNT(*) FROM rescue_emergencies 
+            WHERE nearest_rescue_team = ? AND status NOT IN ('Mission Completed', 'Case Closed')
+        """, (unit,))
+        workloads[unit] = cursor.fetchone()[0]
+        
+    # Find unit with minimum active tasks count
+    sorted_units = sorted(workloads.items(), key=lambda x: x[1])
+    return sorted_units[0][0]
+
+
 def get_initial_status(severity: str) -> str:
     """Determine initial status based on Decision Policy."""
     if severity == 'Critical':
@@ -192,6 +223,11 @@ def submit_emergency():
     try:
         emergency_id = generate_emergency_id(conn)
 
+        assigned_team_unit = ai['nearest_rescue_team']
+        if ai['severity'] == 'Critical':
+            status = 'Team Assigned'
+            assigned_team_unit = get_least_loaded_unit(cursor, ai['recommended_team'])
+
         cursor.execute("""
         INSERT INTO rescue_emergencies
             (emergency_id, description, image_path, lat, lng, landmark,
@@ -204,13 +240,13 @@ def submit_emergency():
             ai['incident_type'], ai['severity'], ai['recommended_team'],
             ai['response_time_minutes'], ai['confidence_score'],
             status, now, now,
-            ai['recommended_departments'], ai['nearest_rescue_team']
+            ai['recommended_departments'], assigned_team_unit
         ))
 
         # Log the event
-        event_type = 'AUTO_DISPATCH' if ai['severity'] == 'Critical' else 'AI_ANALYSIS'
+        event_type = 'AUTO_ASSIGN' if ai['severity'] == 'Critical' else 'AI_ANALYSIS'
         action_msg = (
-            f"System auto-dispatched {ai['recommended_team']} due to Critical severity."
+            f"System auto-assigned Critical emergency directly to {assigned_team_unit} based on lowest workload."
             if ai['severity'] == 'Critical'
             else f"AI classified as {ai['severity']} severity {ai['incident_type']}. Status: {status}."
         )
