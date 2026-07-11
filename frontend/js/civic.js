@@ -8,6 +8,7 @@ let submitMap = null;
 let submitMarker = null;
 let adminMap = null;
 let adminMarkersGroup = null;
+let progressCurrentStatus = "";
 
 // Initialize Page
 document.addEventListener("DOMContentLoaded", () => {
@@ -941,11 +942,12 @@ async function loadEmployeeDashboard() {
       } else if (task.status === "Travelling") {
         actionButtons = `<button class="btn" onclick="updateTaskProgress(${task.id}, 'Reached Location')" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; background-color: var(--color-warning);"><i class="fa-solid fa-location-dot"></i> Reached Loc</button>`;
       } else if (task.status === "Reached Location") {
-        actionButtons = `<button class="btn" onclick="openProgressModal(${task.id}, 'Work Started')" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; background-color: var(--color-warning);"><i class="fa-solid fa-play"></i> Start Work</button>`;
-      } else if (task.status === "Work Started") {
-        actionButtons = `<button class="btn" onclick="openProgressModal(${task.id}, 'Working')" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; background-color: var(--color-warning);"><i class="fa-solid fa-spinner fa-spin"></i> Set Progress</button>`;
+        actionButtons = `<button class="btn" onclick="openProgressModal(${task.id}, 'Working', 'Reached Location')" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; background-color: var(--color-warning);"><i class="fa-solid fa-play"></i> Start Work</button>`;
       } else if (task.status === "Working") {
-        actionButtons = `<button class="btn" onclick="openProgressModal(${task.id}, 'Resolved')" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; background-color: var(--color-success);"><i class="fa-solid fa-check-double"></i> Mark Solved</button>`;
+        actionButtons = `
+          <button class="btn" onclick="openProgressModal(${task.id}, 'Working', 'Working')" style="padding: 0.35rem 0.5rem; font-size: 0.75rem; background-color: var(--color-warning);"><i class="fa-solid fa-spinner fa-spin"></i> Set Progress</button>
+          <button class="btn" onclick="openProgressModal(${task.id}, 'Resolved', 'Working')" style="padding: 0.35rem 0.5rem; font-size: 0.75rem; background-color: var(--color-success);"><i class="fa-solid fa-check-double"></i> Mark Solved</button>
+        `;
       } else {
         actionButtons = `<span style="font-size: 0.75rem; color: var(--text-muted);">Awaiting Verification</span>`;
       }
@@ -1474,7 +1476,8 @@ document.getElementById("btn-submit-rejection").onclick = async () => {
 };
 
 // Progress verification modal
-window.openProgressModal = function(cid, targetStatus) {
+window.openProgressModal = function(cid, targetStatus, currentStatus = "") {
+  progressCurrentStatus = currentStatus;
   const modal = document.getElementById("progress-modal");
   modal.style.display = "flex";
   document.getElementById("progress-complaint-id").value = cid;
@@ -1532,15 +1535,24 @@ document.getElementById("btn-submit-progress").onclick = async () => {
   const image = (progressPreview.style.display === "block" && progressPreview.src && progressPreview.src.startsWith("data:")) ? progressPreview.src : null;
   const comments = document.getElementById("progress-reasons").value.trim();
   
-  if (!image && (status === "Work Started" || status === "Resolved")) {
+  const isStartingWork = (status === "Working" && progressCurrentStatus === "Reached Location");
+  const isClosingWork = (status === "Resolved");
+  
+  if (!image && (isStartingWork || isClosingWork)) {
     alert("Image verification upload is mandatory for auditing before starting or closing work.");
     return;
   }
   
   let before_image = null, progress_image = null, completion_image = null;
-  if (status === "Work Started") before_image = image;
-  else if (status === "Working") progress_image = image;
-  else if (status === "Resolved") completion_image = image;
+  if (status === "Working") {
+    if (progressCurrentStatus === "Reached Location") {
+      before_image = image;
+    } else {
+      progress_image = image;
+    }
+  } else if (status === "Resolved") {
+    completion_image = image;
+  }
   
   await updateTaskProgress(cid, status, before_image, progress_image, completion_image, comments);
   document.getElementById("progress-modal").style.display = "none";
