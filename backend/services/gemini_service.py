@@ -117,8 +117,18 @@ def analyze_emergency_with_gemini(description: str, image_b64: str = None) -> di
         }
     }
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-    headers = {"Content-Type": "application/json"}
+    # Auto-detect key type:
+    #   AIza...  → standard API key via ?key= query param
+    #   AQ....   → OAuth2 bearer token via Authorization header
+    if api_key.startswith('AIza'):
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+        headers = {"Content-Type": "application/json"}
+    else:
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
 
     try:
         data_bytes = json.dumps(req_body).encode('utf-8')
