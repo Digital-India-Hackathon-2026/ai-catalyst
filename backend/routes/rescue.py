@@ -770,8 +770,8 @@ def transcribe_speech():
         from services.deepgram_service import transcribe_audio
         audio_data = file.read()
         content_type = file.content_type or 'audio/webm'
-        transcript = transcribe_audio(audio_data, content_type)
-        return jsonify({"transcript": transcript})
+        transcript, language = transcribe_audio(audio_data, content_type)
+        return jsonify({"transcript": transcript, "language": language})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

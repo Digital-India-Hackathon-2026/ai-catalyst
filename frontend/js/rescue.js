@@ -133,10 +133,11 @@ function formatTime(isoStr) {
   });
 }
 
-function severityBadge(severity) {
+function severityBadge(severity, displayLabel) {
   const s = (severity || '').toLowerCase();
   const icons = { critical: '🔴', high: '🟠', medium: '🟡', low: '🟢' };
-  return `<span class="badge-severity ${s}">${icons[s] || ''} ${severity}</span>`;
+  const label = displayLabel || severity;
+  return `<span class="badge-severity ${s}">${icons[s] || ''} ${label}</span>`;
 }
 
 let googleMapsLoadedPromise = null;
@@ -850,7 +851,7 @@ function renderResultPage(e, root) {
       <div class="result-hero-card glass-card severity-${sevClass}">
         <div class="emergency-id-badge">Emergency ID: ${e.emergency_id}</div>
         <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.5rem;">
-          ${severityBadge(e.severity)}
+          ${severityBadge(e.severity, citizenData.severity || e.severity)}
         </div>
         <div class="result-incident-type">${displayIncidentType}</div>
         <p style="color:var(--text-secondary);font-size:0.88rem;line-height:1.6;margin-top:0.5rem;">${e.description}</p>
@@ -1159,6 +1160,21 @@ const STEP_DESCRIPTIONS = [
 function renderTrackingPage(data, root) {
   const { emergency: e, tracking_steps, current_step_index } = data;
 
+  // Parse complete Gemini AI JSON stored in the DB to extract localized display content
+  let geminiRaw = {};
+  try {
+    if (e.ai_analysis_json) geminiRaw = JSON.parse(e.ai_analysis_json);
+  } catch (err) {
+    console.error('Error parsing ai_analysis_json:', err);
+  }
+
+  const hasDualFormat = geminiRaw.system_analysis && geminiRaw.citizen_analysis
+    && typeof geminiRaw.system_analysis === 'object'
+    && typeof geminiRaw.citizen_analysis === 'object';
+
+  const citizenData = hasDualFormat ? geminiRaw.citizen_analysis : geminiRaw;
+  const displayIncidentType = citizenData.incident_type || e.incident_type;
+
   const stepsHTML = tracking_steps.map((step, i) => {
     let cls = '';
     if (i < current_step_index) cls = 'completed';
@@ -1179,9 +1195,9 @@ function renderTrackingPage(data, root) {
     <div class="tracking-wrapper">
       <div class="tracking-hero glass-card">
         <div class="eid">Emergency ID: ${e.emergency_id}</div>
-        ${severityBadge(e.severity)}
+        ${severityBadge(e.severity, citizenData.severity || e.severity)}
         <div class="current-status-label">${e.status}</div>
-        <p style="font-size:0.82rem;color:var(--text-secondary);margin-top:0.5rem;">${e.incident_type} · ${e.recommended_team}</p>
+        <p style="font-size:0.82rem;color:var(--text-secondary);margin-top:0.5rem;">${displayIncidentType} · ${e.recommended_team}</p>
       </div>
 
       <div class="glass-card" style="margin-bottom:1.5rem;">
@@ -1214,11 +1230,11 @@ function renderTrackingPage(data, root) {
           <div style="display:flex;flex-direction:column;gap:.75rem;">
             <div>
               <p style="font-size:0.72rem;color:var(--text-muted);">LOCATION</p>
-              <p style="font-size:0.88rem;">${e.landmark || (e.lat ? `${e.lat}, ${e.lng}` : 'Not specified')}</p>
+              <p style="font-size:0.88rem;">${citizenData.landmark || e.landmark || (e.lat ? `${e.lat}, ${e.lng}` : 'Not specified')}</p>
             </div>
             <div>
               <p style="font-size:0.72rem;color:var(--text-muted);">DEPARTMENTS</p>
-              <p style="font-size:0.88rem;">${e.recommended_departments || 'N/A'}</p>
+              <p style="font-size:0.88rem;">${Array.isArray(citizenData.required_departments) ? citizenData.required_departments.join(', ') : (e.recommended_departments || 'N/A')}</p>
             </div>
             <div>
               <p style="font-size:0.72rem;color:var(--text-muted);">NEAREST TEAM</p>
@@ -1226,7 +1242,7 @@ function renderTrackingPage(data, root) {
             </div>
             <div>
               <p style="font-size:0.72rem;color:var(--text-muted);">RESPONSE ETA</p>
-              <p style="font-size:0.88rem;">${e.response_time_minutes} minutes</p>
+              <p style="font-size:0.88rem;">${citizenData.estimated_response_time || e.response_time_minutes || 'N/A'} minutes</p>
             </div>
             <div>
               <p style="font-size:0.72rem;color:var(--text-muted);">SUBMITTED</p>

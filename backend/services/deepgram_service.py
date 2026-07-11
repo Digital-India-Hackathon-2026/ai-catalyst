@@ -40,7 +40,17 @@ def transcribe_audio(audio_data, content_type='audio/webm'):
                 raise ValueError("Deepgram transcription returned empty alternatives.")
             
             transcript = alternatives[0].get('transcript', '')
-            return transcript.strip()
+            
+            # Map detected language to full name: English, Hindi, Telugu. Default to English.
+            dg_lang = channels[0].get('detected_language') or 'en'
+            lang_mapping = {
+                'en': 'English',
+                'hi': 'Hindi',
+                'te': 'Telugu'
+            }
+            language_name = lang_mapping.get(dg_lang[:2].lower(), 'English')
+            
+            return transcript.strip(), language_name
             
     except urllib.error.HTTPError as he:
         err_msg = he.read().decode('utf-8')
