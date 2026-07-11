@@ -787,15 +787,19 @@ function renderResultPage(e, root) {
     'Pending Review':              '📋',
   }[e.status] || '📋';
 
-  // Parse complete Gemini JSON response
-  let gemini = {};
+  // Parse complete Gemini JSON response — supports both old flat format and new dual-language format
+  let geminiRaw = {};
   try {
     if (e.ai_analysis_json) {
-      gemini = JSON.parse(e.ai_analysis_json);
+      geminiRaw = JSON.parse(e.ai_analysis_json);
     }
   } catch (err) {
     console.error("Error parsing ai_analysis_json:", err);
   }
+  // If the new dual-language format is present, use system_analysis for all technical fields
+  const gemini = (geminiRaw.system_analysis && typeof geminiRaw.system_analysis === 'object')
+    ? geminiRaw.system_analysis
+    : geminiRaw;
 
   const aiSummary = gemini.ai_summary || e.ai_decision_summary || 'No summary available.';
   const requiredDepts = Array.isArray(gemini.required_departments) ? gemini.required_departments : (e.recommended_departments ? e.recommended_departments.split(', ') : []);
@@ -1449,8 +1453,8 @@ export async function initControlRoom() {
   await refresh();
   initFilters(root, statsEl);
 
-  // Auto-refresh every 30 seconds so completed missions appear immediately
-  setInterval(refresh, 30000);
+  // Auto-refresh every 10 seconds for real-time status synchronisation across all portals
+  setInterval(refresh, 10000);
 }
 
 
@@ -1910,8 +1914,8 @@ export async function initTeamDashboard() {
     if (bannerPrimary) bannerPrimary.textContent  = currentPrimaryTeam;
     if (bannerIcon)    bannerIcon.textContent     = UNIT_ICONS[currentPrimaryTeam] || '🚒';
     loadMissions();
-    // Auto-refresh every 30s
-    setInterval(loadMissions, 30000);
+    // Auto-refresh every 10s for real-time status synchronisation
+    setInterval(loadMissions, 10000);
   }
 
   async function loadMissions() {
