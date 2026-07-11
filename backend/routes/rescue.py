@@ -13,7 +13,7 @@ rescue_bp = Blueprint('rescue', __name__)
 
 RESCUE_RULES = [
     {
-        'keywords': ['fire', 'blaze', 'burning', 'flames', 'smoke', 'arson', 'inferno'],
+        'keywords': ['fire', 'blaze', 'burning', 'flames', 'smoke', 'arson', 'inferno', 'आग', 'जल रहा', 'धुआं', 'మంటలు', 'కాల్చడం', 'పొగ', 'అగ్ని'],
         'incident_type': 'Fire Emergency',
         'severity': 'Critical',
         'team': 'Fire Response Unit',
@@ -23,7 +23,7 @@ RESCUE_RULES = [
         'nearest_team': 'Ameerpet Fire Station Unit'
     },
     {
-        'keywords': ['flood', 'drowning', 'swept', 'submerged', 'waterlogged', 'drowning', 'flash flood', 'washed away'],
+        'keywords': ['flood', 'drowning', 'swept', 'submerged', 'waterlogged', 'flash flood', 'washed away', 'बाढ़', 'डूब रहा', 'पानी भर', 'వరద', 'మునిగి', 'వరదలు', 'నీరు నిలిచింది'],
         'incident_type': 'Flood / Water Rescue',
         'severity': 'Critical',
         'team': 'Flood Rescue (NDRF)',
@@ -33,7 +33,7 @@ RESCUE_RULES = [
         'nearest_team': 'Secunderabad NDRF Battalion'
     },
     {
-        'keywords': ['collapse', 'collapsed', 'building fell', 'trapped', 'rubble', 'debris', 'structure', 'sinkhole', 'earthquake'],
+        'keywords': ['collapse', 'collapsed', 'building fell', 'trapped', 'rubble', 'debris', 'structure', 'sinkhole', 'earthquake', 'ढह गया', 'भूकंप', 'मलबे', 'కూలిపోయింది', 'భూకంపం', 'శిథిలాలు'],
         'incident_type': 'Structural Collapse',
         'severity': 'Critical',
         'team': 'SDRF Structural Response Team',
@@ -43,7 +43,7 @@ RESCUE_RULES = [
         'nearest_team': 'Jubilee Hills SDRF Team'
     },
     {
-        'keywords': ['gas leak', 'gas pipe', 'chemical', 'toxic', 'hazmat', 'poison', 'fumes', 'lpg', 'cylinder blast'],
+        'keywords': ['gas leak', 'gas pipe', 'chemical', 'toxic', 'hazmat', 'poison', 'fumes', 'lpg', 'cylinder blast', 'गैस रिसाव', 'जहरीला', 'रासायनिक', 'గ్యాస్ లీక్', 'విషపూరిత', 'రసాయన'],
         'incident_type': 'Hazardous Material Incident',
         'severity': 'High',
         'team': 'Hazmat Response Unit',
@@ -53,7 +53,7 @@ RESCUE_RULES = [
         'nearest_team': 'Gachibowli Hazmat Station'
     },
     {
-        'keywords': ['accident', 'crash', 'collision', 'vehicle overturned', 'truck', 'bus', 'car', 'road', 'highway', 'injured', 'injury', 'hit'],
+        'keywords': ['accident', 'crash', 'collision', 'vehicle overturned', 'truck', 'bus', 'car', 'road', 'highway', 'injured', 'injury', 'hit', 'दुर्घटना', 'चोट', 'टक्कर', 'ప్రమాదం', 'గాయం', 'ఢీకొట్టి'],
         'incident_type': 'Road Accident',
         'severity': 'High',
         'team': 'Emergency Response Team',
@@ -63,7 +63,7 @@ RESCUE_RULES = [
         'nearest_team': 'Madhapur Patrol Unit'
     },
     {
-        'keywords': ['power line', 'electric wire', 'live wire', 'fallen wire', 'electrocution', 'transformer blast'],
+        'keywords': ['power line', 'electric wire', 'live wire', 'fallen wire', 'electrocution', 'transformer blast', 'बिजली', 'करंट', 'విద్యుత్', 'కరెంట్'],
         'incident_type': 'Electrical Emergency',
         'severity': 'Medium',
         'team': 'Electrical Emergency Unit',
@@ -73,7 +73,7 @@ RESCUE_RULES = [
         'nearest_team': 'Begumpet Power Grid Response'
     },
     {
-        'keywords': ['fallen tree', 'tree fell', 'uprooted', 'tree blocking', 'storm damage', 'windstorm', 'cyclone damage'],
+        'keywords': ['fallen tree', 'tree fell', 'uprooted', 'tree blocking', 'storm damage', 'windstorm', 'cyclone damage', 'पेड़ गिर', 'तूफान', 'చెట్టు పడిపోయింది', 'తుఫాను'],
         'incident_type': 'Fallen Tree / Debris',
         'severity': 'Medium',
         'team': 'Civic Emergency Team',
@@ -83,7 +83,7 @@ RESCUE_RULES = [
         'nearest_team': 'Kondapur Municipal Crew'
     },
     {
-        'keywords': ['landslide', 'mudslide', 'mud', 'hillside', 'slope'],
+        'keywords': ['landslide', 'mudslide', 'mud', 'hillside', 'slope', 'भूस्खलन', 'కొండచరియలు'],
         'incident_type': 'Landslide / Erosion',
         'severity': 'High',
         'team': 'SDRF Structural Response Team',
