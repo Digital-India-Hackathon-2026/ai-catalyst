@@ -1,11 +1,23 @@
 from flask import Blueprint, request, jsonify
 from db import get_db_connection
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+from decimal import Decimal
 import math
 import os
 import groq as groq_sdk
 
 civic_bp = Blueprint('civic', __name__)
+
+def serialize_row(row):
+    """Convert a psycopg2 RealDictRow to a JSON-safe dict (handles Decimal, datetime, date)."""
+    d = dict(row)
+    for k, v in d.items():
+        if isinstance(v, Decimal):
+            d[k] = float(v)
+        elif isinstance(v, (datetime, date)):
+            d[k] = v.isoformat()
+    return d
+
 
 def haversine_distance(lat1, lon1, lat2, lon2):
     """Calculates distance in kilometers between two lat/lng pairs."""
@@ -47,20 +59,20 @@ def register():
     cursor = conn.cursor()
     
     try:
-        cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+        cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
         if cursor.fetchone():
             return jsonify({"error": "Username already exists"}), 400
             
-        cursor.execute("INSERT INTO users (username, password, role, full_name) VALUES (?, ?, ?, ?)",
+        cursor.execute("INSERT INTO users (username, password, role, full_name) VALUES (%s, %s, %s, %s) RETURNING id",
                        (username, password, role, full_name))
-        user_id = cursor.lastrowid
+        user_id = cursor.fetchone()['id']
         
         # If registering an employee, create employee profile too
         if role == 'Employee':
             emp_id = f"EMP{user_id:03d}"
             cursor.execute("""
             INSERT INTO employees (user_id, employee_id, department, designation, experience_years, specialization, lat, lng, profile_photo)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (user_id, emp_id, 'Civic', 'Field Officer', 2, 'General Civic Issues', 17.3850, 78.4867, 
                   'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&fit=crop&q=80'))
                   
@@ -92,12 +104,12 @@ def login():
     cursor = conn.cursor()
     
     try:
-        cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
+        cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
         user = cursor.fetchone()
         if not user:
             return jsonify({"error": "Invalid username or password"}), 401
             
-        user_dict = dict(user)
+        user_dict = serialize_row(user)
         
         # If user is not Citizen, check password
         if user_dict['role'] != 'Citizen':
@@ -108,10 +120,10 @@ def login():
         
         # If user is an employee, attach employee profile fields
         if user_dict['role'] == 'Employee':
-            cursor.execute("SELECT * FROM employees WHERE user_id = ?", (user_dict['id'],))
+            cursor.execute("SELECT * FROM employees WHERE user_id = %s", (user_dict['id'],))
             emp = cursor.fetchone()
             if emp:
-                user_dict['employee_details'] = dict(emp)
+                user_dict['employee_details'] = serialize_row(emp)
                 
         return jsonify({
             "message": "Login successful",
@@ -291,9 +303,9 @@ def manage_complaints():
         try:
             cursor.execute("""
             INSERT INTO complaints (title, category, description, image_path, lat, lng, priority, status, citizen_id, created_at, deadline)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'Submitted', ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 'Submitted', %s, %s, %s) RETURNING id
             """, (title, category, description, image_path, lat, lng, priority, citizen_id, now.isoformat(), deadline.isoformat()))
-            complaint_id = cursor.lastrowid
+            complaint_id = cursor.fetchone()['id']
             
             # Send Notification to Admin
             cursor.execute("SELECT id FROM users WHERE role = 'Admin'")
@@ -301,7 +313,7 @@ def manage_complaints():
             for admin in admins:
                 cursor.execute("""
                 INSERT INTO notifications (user_id, message, type, created_at)
-                VALUES (?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s)
                 """, (admin['id'], f"New complaint #{complaint_id} '{title}' submitted.", 'info', now.isoformat()))
                 
             conn.commit()
@@ -326,22 +338,22 @@ def manage_complaints():
         params = []
         
         if status_filter:
-            query += " AND c.status = ?"
+            query += " AND c.status = %s"
             params.append(status_filter)
         if priority_filter:
-            query += " AND c.priority = ?"
+            query += " AND c.priority = %s"
             params.append(priority_filter)
         if category_filter:
-            query += " AND c.category = ?"
+            query += " AND c.category = %s"
             params.append(category_filter)
         if citizen_filter:
-            query += " AND c.citizen_id = ?"
+            query += " AND c.citizen_id = %s"
             params.append(citizen_filter)
         if employee_filter:
-            query += " AND c.assigned_employee_id = ?"
+            query += " AND c.assigned_employee_id = %s"
             params.append(employee_filter)
         if search:
-            query += " AND (c.title LIKE ? OR c.description LIKE ?)"
+            query += " AND (c.title LIKE %s OR c.description LIKE %s)"
             params.append(f"%{search}%")
             params.append(f"%{search}%")
             
@@ -349,7 +361,7 @@ def manage_complaints():
         
         try:
             cursor.execute(query, params)
-            complaints = [dict(row) for row in cursor.fetchall()]
+            complaints = [serialize_row(row) for row in cursor.fetchall()]
             return jsonify(complaints)
         except Exception as e:
             return jsonify({"error": str(e)}), 500
@@ -363,12 +375,12 @@ def manage_single_complaint(cid):
     
     if request.method == 'GET':
         try:
-            cursor.execute("SELECT c.*, u.full_name as citizen_name FROM complaints c LEFT JOIN users u ON c.citizen_id = u.id WHERE c.id = ?", (cid,))
+            cursor.execute("SELECT c.*, u.full_name as citizen_name FROM complaints c LEFT JOIN users u ON c.citizen_id = u.id WHERE c.id = %s", (cid,))
             complaint = cursor.fetchone()
             if not complaint:
                 return jsonify({"error": "Complaint not found"}), 404
                 
-            complaint_dict = dict(complaint)
+            complaint_dict = serialize_row(complaint)
             
             # Fetch assigned employee details if any
             if complaint_dict['assigned_employee_id']:
@@ -376,15 +388,15 @@ def manage_single_complaint(cid):
                 SELECT e.*, u.full_name as employee_name 
                 FROM employees e 
                 JOIN users u ON e.user_id = u.id 
-                WHERE e.id = ?
+                WHERE e.id = %s
                 """, (complaint_dict['assigned_employee_id'],))
                 emp = cursor.fetchone()
                 if emp:
-                    complaint_dict['assigned_employee'] = dict(emp)
+                    complaint_dict['assigned_employee'] = serialize_row(emp)
                     
             # Fetch audit logs
-            cursor.execute("SELECT * FROM audit_logs WHERE complaint_id = ? ORDER BY timestamp DESC", (cid,))
-            complaint_dict['audit_logs'] = [dict(log) for log in cursor.fetchall()]
+            cursor.execute("SELECT * FROM audit_logs WHERE complaint_id = %s ORDER BY timestamp DESC", (cid,))
+            complaint_dict['audit_logs'] = [serialize_row(log) for log in cursor.fetchall()]
             
             return jsonify(complaint_dict)
         except Exception as e:
@@ -404,43 +416,43 @@ def manage_single_complaint(cid):
         actor = data.get('actor', 'System')
         
         try:
-            cursor.execute("SELECT * FROM complaints WHERE id = ?", (cid,))
+            cursor.execute("SELECT * FROM complaints WHERE id = %s", (cid,))
             complaint = cursor.fetchone()
             if not complaint:
                 return jsonify({"error": "Complaint not found"}), 404
                 
-            complaint = dict(complaint)
+            complaint = serialize_row(complaint)
             
             update_fields = []
             params = []
             
             if status:
-                update_fields.append("status = ?")
+                update_fields.append("status = %s")
                 params.append(status)
             if before_image:
-                update_fields.append("before_image = ?")
+                update_fields.append("before_image = %s")
                 params.append(before_image)
             if progress_image:
-                update_fields.append("progress_image = ?")
+                update_fields.append("progress_image = %s")
                 params.append(progress_image)
             if completion_image:
-                update_fields.append("completion_image = ?")
+                update_fields.append("completion_image = %s")
                 params.append(completion_image)
             if citizen_rating is not None:
-                update_fields.append("citizen_rating = ?")
+                update_fields.append("citizen_rating = %s")
                 params.append(citizen_rating)
             if citizen_feedback:
-                update_fields.append("citizen_feedback = ?")
+                update_fields.append("citizen_feedback = %s")
                 params.append(citizen_feedback)
             if rejection_reason:
-                update_fields.append("rejection_reason = ?")
+                update_fields.append("rejection_reason = %s")
                 params.append(rejection_reason)
                 
             if not update_fields:
                 return jsonify({"error": "No fields to update"}), 400
                 
             params.append(cid)
-            query = f"UPDATE complaints SET {', '.join(update_fields)} WHERE id = ?"
+            query = f"UPDATE complaints SET {', '.join(update_fields)} WHERE id = %s"
             cursor.execute(query, params)
             
             # Log audit and trigger notifications on status change
@@ -449,38 +461,38 @@ def manage_single_complaint(cid):
                 
                 # Check for Resolved status to compute employee performance update
                 if status == 'Resolved':
-                    cursor.execute("UPDATE complaints SET expected_completion = ? WHERE id = ?", (now, cid))
+                    cursor.execute("UPDATE complaints SET expected_completion = %s WHERE id = %s", (now, cid))
                     # Adjust employee active task load
                     if complaint['assigned_employee_id']:
-                        cursor.execute("UPDATE employees SET status = 'Available' WHERE id = ?", (complaint['assigned_employee_id'],))
+                        cursor.execute("UPDATE employees SET status = 'Available' WHERE id = %s", (complaint['assigned_employee_id'],))
                         
                 elif status == 'Closed' and citizen_rating:
                     # Update employee average rating
                     emp_id = complaint['assigned_employee_id']
                     if emp_id:
-                        cursor.execute("SELECT AVG(citizen_rating) FROM complaints WHERE assigned_employee_id = ? AND status='Closed'", (emp_id,))
-                        avg_rating = cursor.fetchone()[0] or citizen_rating
-                        cursor.execute("UPDATE employees SET rating = ? WHERE id = ?", (round(avg_rating, 2), emp_id))
+                        cursor.execute("SELECT AVG(citizen_rating) FROM complaints WHERE assigned_employee_id = %s AND status='Closed'", (emp_id,))
+                        avg_rating = list(cursor.fetchone().values())[0] or citizen_rating
+                        cursor.execute("UPDATE employees SET rating = %s WHERE id = %s", (round(avg_rating, 2), emp_id))
                 
                 cursor.execute("""
                 INSERT INTO audit_logs (complaint_id, event_type, action, reason, actor, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 """, (cid, 'STATUS_CHANGE', f"Complaint status updated from {complaint['status']} to {status}", rejection_reason or "Regular workflow transition.", actor, now))
                 
                 # Notify Citizen
                 if complaint['citizen_id']:
                     cursor.execute("""
                     INSERT INTO notifications (user_id, message, type, created_at)
-                    VALUES (?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s)
                     """, (complaint['citizen_id'], f"Your complaint '{complaint['title']}' is now: {status}.", 'info', now))
                     
                 # Notify Employee if assigned
                 if complaint['assigned_employee_id']:
-                    cursor.execute("SELECT user_id FROM employees WHERE id = ?", (complaint['assigned_employee_id'],))
-                    emp_user_id = cursor.fetchone()[0]
+                    cursor.execute("SELECT user_id FROM employees WHERE id = %s", (complaint['assigned_employee_id'],))
+                    emp_user_id = list(cursor.fetchone().values())[0]
                     cursor.execute("""
                     INSERT INTO notifications (user_id, message, type, created_at)
-                    VALUES (?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s)
                     """, (emp_user_id, f"Complaint #{cid} status updated by {actor} to: {status}.", 'info', now))
                     
             conn.commit()
@@ -509,7 +521,7 @@ def get_employees():
         FROM employees e
         JOIN users u ON e.user_id = u.id
         """)
-        employees = [dict(row) for row in cursor.fetchall()]
+        employees = [serialize_row(row) for row in cursor.fetchall()]
         return jsonify(employees)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -526,21 +538,21 @@ def get_employee_details(emp_id):
         SELECT e.*, u.full_name, u.username
         FROM employees e
         JOIN users u ON e.user_id = u.id
-        WHERE e.id = ?
+        WHERE e.id = %s
         """, (emp_id,))
         emp = cursor.fetchone()
         if not emp:
             return jsonify({"error": "Employee not found"}), 404
             
-        emp_dict = dict(emp)
+        emp_dict = serialize_row(emp)
         
         # Load tasks
         cursor.execute("""
         SELECT * FROM complaints 
-        WHERE assigned_employee_id = ? 
+        WHERE assigned_employee_id = %s 
         ORDER BY created_at DESC
         """, (emp_id,))
-        tasks = [dict(t) for t in cursor.fetchall()]
+        tasks = [serialize_row(t) for t in cursor.fetchall()]
         emp_dict['current_tasks'] = [t for t in tasks if t['status'] not in ['Resolved', 'Closed']]
         emp_dict['completed_tasks'] = [t for t in tasks if t['status'] in ['Resolved', 'Closed']]
         
@@ -556,12 +568,12 @@ def get_complaint_recommendations(cid):
     cursor = conn.cursor()
     
     try:
-        cursor.execute("SELECT * FROM complaints WHERE id = ?", (cid,))
+        cursor.execute("SELECT * FROM complaints WHERE id = %s", (cid,))
         complaint = cursor.fetchone()
         if not complaint:
             return jsonify({"error": "Complaint not found"}), 404
             
-        complaint = dict(complaint)
+        complaint = serialize_row(complaint)
         comp_lat = complaint['lat']
         comp_lng = complaint['lng']
         comp_category = complaint['category']
@@ -575,7 +587,7 @@ def get_complaint_recommendations(cid):
         FROM employees e
         JOIN users u ON e.user_id = u.id
         """)
-        employees = [dict(row) for row in cursor.fetchall()]
+        employees = [serialize_row(row) for row in cursor.fetchall()]
         
         recommendations = []
         
@@ -670,31 +682,31 @@ def assign_complaint(cid):
     
     try:
         # Check complaint status
-        cursor.execute("SELECT * FROM complaints WHERE id = ?", (cid,))
+        cursor.execute("SELECT * FROM complaints WHERE id = %s", (cid,))
         complaint = cursor.fetchone()
         if not complaint:
             return jsonify({"error": "Complaint not found"}), 404
             
-        complaint = dict(complaint)
+        complaint = serialize_row(complaint)
         
         # Check employee details
-        cursor.execute("SELECT e.*, u.full_name, u.id as emp_user_id FROM employees e JOIN users u ON e.user_id = u.id WHERE e.id = ?", (employee_id,))
+        cursor.execute("SELECT e.*, u.full_name, u.id as emp_user_id FROM employees e JOIN users u ON e.user_id = u.id WHERE e.id = %s", (employee_id,))
         emp = cursor.fetchone()
         if not emp:
             return jsonify({"error": "Employee profile not found"}), 404
             
-        emp = dict(emp)
+        emp = serialize_row(emp)
         now = datetime.now().isoformat()
         
         # Update complaint assignment
         cursor.execute("""
         UPDATE complaints 
-        SET assigned_employee_id = ?, status = 'Assigned Employee', expected_completion = ?
-        WHERE id = ?
+        SET assigned_employee_id = %s, status = 'Assigned Employee', expected_completion = %s
+        WHERE id = %s
         """, (employee_id, (datetime.now() + timedelta(hours=4)).isoformat(), cid))
         
         # Update employee status
-        cursor.execute("UPDATE employees SET status = 'Busy' WHERE id = ?", (employee_id,))
+        cursor.execute("UPDATE employees SET status = 'Busy' WHERE id = %s", (employee_id,))
         
         # Log Audit Trail
         event_type = 'SUPERVISOR_OVERRIDE' if is_override else 'MANUAL_CONFIRM'
@@ -704,20 +716,20 @@ def assign_complaint(cid):
             
         cursor.execute("""
         INSERT INTO audit_logs (complaint_id, event_type, action, reason, actor, timestamp)
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s)
         """, (cid, event_type, action_text, reason, actor, now))
         
         # Notify Citizen
         if complaint['citizen_id']:
             cursor.execute("""
             INSERT INTO notifications (user_id, message, type, created_at)
-            VALUES (?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s)
             """, (complaint['citizen_id'], f"Your complaint '{complaint['title']}' has been assigned to {emp['full_name']}.", 'info', now))
             
         # Notify Employee
         cursor.execute("""
         INSERT INTO notifications (user_id, message, type, created_at)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
         """, (emp['emp_user_id'], f"New assignment received: {complaint['title']}. Deadline: {complaint['deadline']}.", 'emergency', now))
         
         conn.commit()
@@ -742,7 +754,7 @@ def get_notifications():
     try:
         cursor.execute("""
         SELECT * FROM notifications 
-        WHERE user_id = ? 
+        WHERE user_id = %s 
         ORDER BY created_at DESC
         """, (user_id,))
         notifications = [dict(n) for n in cursor.fetchall()]
@@ -758,7 +770,7 @@ def mark_read(nid):
     cursor = conn.cursor()
     
     try:
-        cursor.execute("UPDATE notifications SET read_status = 1 WHERE id = ?", (nid,))
+        cursor.execute("UPDATE notifications SET read_status = 1 WHERE id = %s", (nid,))
         conn.commit()
         return jsonify({"message": "Notification marked as read"})
     except Exception as e:
@@ -788,26 +800,26 @@ def get_analytics():
         
         # Emergency complaints (Critical Priority)
         cursor.execute("SELECT COUNT(*) FROM complaints WHERE priority = 'Critical' AND status != 'Closed'")
-        emergency_count = cursor.fetchone()[0]
+        emergency_count = list(cursor.fetchone().values())[0]
         
         # Employee availability counts
-        cursor.execute("SELECT status, COUNT(*) FROM employees GROUP BY status")
-        emp_avail = {row[0]: row[1] for row in cursor.fetchall()}
+        cursor.execute("SELECT status, COUNT(*) as cnt FROM employees GROUP BY status")
+        emp_avail = {row['status']: row['cnt'] for row in cursor.fetchall()}
         available_count = emp_avail.get('Available', 0)
         
         # SLA Violations (current time is after deadline and status is not Resolved/Closed)
         now_str = datetime.now().isoformat()
-        cursor.execute("SELECT COUNT(*) FROM complaints WHERE deadline < ? AND status NOT IN ('Resolved', 'Closed')", (now_str,))
-        sla_violations = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM complaints WHERE deadline < %s AND status NOT IN ('Resolved', 'Closed')", (now_str,))
+        sla_violations = list(cursor.fetchone().values())[0]
         
         # Today's complaints count
         today_str = datetime.now().strftime('%Y-%m-%d')
-        cursor.execute("SELECT COUNT(*) FROM complaints WHERE substr(created_at, 1, 10) = ?", (today_str,))
-        today_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM complaints WHERE created_at::date = %s", (today_str,))
+        today_count = list(cursor.fetchone().values())[0]
         
         # High priority complaints count (excluding closed ones)
         cursor.execute("SELECT COUNT(*) FROM complaints WHERE priority = 'High' AND status != 'Closed'")
-        high_priority_count = cursor.fetchone()[0]
+        high_priority_count = list(cursor.fetchone().values())[0]
         
         # Average resolution time calculation
         cursor.execute("SELECT created_at, expected_completion FROM complaints WHERE status IN ('Resolved', 'Closed') AND expected_completion IS NOT NULL")
@@ -833,12 +845,12 @@ def get_analytics():
             average_resolution_time = "3.2 hours"
 
         # Category distribution
-        cursor.execute("SELECT category, COUNT(*) FROM complaints GROUP BY category")
-        category_dist = {row[0]: row[1] for row in cursor.fetchall()}
+        cursor.execute("SELECT category, COUNT(*) as cnt FROM complaints GROUP BY category")
+        category_dist = {row['category']: row['cnt'] for row in cursor.fetchall()}
         
         # Area wise complaints (Group by lat/lng coordinates rounded to 2 decimal places to simulate areas/blocks)
-        cursor.execute("SELECT ROUND(lat, 2) as lat_area, ROUND(lng, 2) as lng_area, COUNT(*) as count FROM complaints GROUP BY lat_area, lng_area")
-        area_dist = [{"lat": row[0], "lng": row[1], "count": row[2]} for row in cursor.fetchall()]
+        cursor.execute("SELECT ROUND(lat::numeric, 2) as lat_area, ROUND(lng::numeric, 2) as lng_area, COUNT(*) as count FROM complaints GROUP BY lat_area, lng_area")
+        area_dist = [{"lat": float(row['lat_area']), "lng": float(row['lng_area']), "count": row['count']} for row in cursor.fetchall()]
         
         # Employee ranking list
         cursor.execute("""
@@ -848,7 +860,7 @@ def get_analytics():
         JOIN users u ON e.user_id = u.id
         ORDER BY e.rating DESC, e.efficiency_percentage DESC
         """)
-        employee_performance = [dict(row) for row in cursor.fetchall()]
+        employee_performance = [serialize_row(row) for row in cursor.fetchall()]
         
         # Recent activities
         cursor.execute("""
@@ -858,7 +870,7 @@ def get_analytics():
         ORDER BY a.timestamp DESC 
         LIMIT 10
         """)
-        recent_activities = [dict(row) for row in cursor.fetchall()]
+        recent_activities = [serialize_row(row) for row in cursor.fetchall()]
         
         return jsonify({
             "total_complaints": total_complaints,

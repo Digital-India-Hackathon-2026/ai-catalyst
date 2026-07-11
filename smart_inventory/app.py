@@ -35,13 +35,13 @@ def create_app():
                 conn = get_db_connection()
                 cursor = conn.cursor()
                 if session['role'] == 'asha':
-                    cursor.execute("SELECT COUNT(*) FROM notifications WHERE user_role = 'asha' AND village = ? AND is_read = 0;", (session['village'],))
-                    unread_count = cursor.fetchone()[0]
-                    cursor.execute("SELECT * FROM notifications WHERE user_role = 'asha' AND village = ? ORDER BY created_at DESC LIMIT 5;", (session['village'],))
+                    cursor.execute("SELECT COUNT(*) FROM notifications WHERE user_role = 'asha' AND village = %s AND read_status = 0;", (session['village'],))
+                    unread_count = list(cursor.fetchone().values())[0]
+                    cursor.execute("SELECT * FROM notifications WHERE user_role = 'asha' AND village = %s ORDER BY created_at DESC LIMIT 5;", (session['village'],))
                     recent_notifs = cursor.fetchall()
                 else:
-                    cursor.execute("SELECT COUNT(*) FROM notifications WHERE user_role = 'mandal' AND is_read = 0;")
-                    unread_count = cursor.fetchone()[0]
+                    cursor.execute("SELECT COUNT(*) FROM notifications WHERE user_role = 'mandal' AND read_status = 0;")
+                    unread_count = list(cursor.fetchone().values())[0]
                     cursor.execute("SELECT * FROM notifications WHERE user_role = 'mandal' ORDER BY created_at DESC LIMIT 5;")
                     recent_notifs = cursor.fetchall()
                 conn.close()

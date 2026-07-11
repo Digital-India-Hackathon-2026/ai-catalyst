@@ -22,8 +22,8 @@ def dashboard():
     cursor = conn.cursor()
 
     # 1. Total Registered
-    cursor.execute("SELECT COUNT(*) FROM polio_children WHERE village = ?", (village,))
-    total_registered = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM polio_children WHERE village = %s", (village,))
+    total_registered = list(cursor.fetchone().values())[0]
 
     # 2. Vaccinated Today & Due Today
     today = datetime.now().strftime("%Y-%m-%d")
@@ -31,31 +31,31 @@ def dashboard():
     cursor.execute("""
         SELECT COUNT(*) FROM polio_vaccinations v
         JOIN polio_children c ON v.child_id = c.id
-        WHERE c.village = ? AND v.administered_date = ? AND v.status = 'Completed'
+        WHERE c.village = %s AND v.administered_date = %s AND v.status = 'Completed'
     """, (village, today))
-    vaccinated_today = cursor.fetchone()[0]
+    vaccinated_today = list(cursor.fetchone().values())[0]
 
     cursor.execute("""
         SELECT COUNT(*) FROM polio_vaccinations v
         JOIN polio_children c ON v.child_id = c.id
-        WHERE c.village = ? AND v.scheduled_date = ? AND v.status = 'Pending'
+        WHERE c.village = %s AND v.scheduled_date = %s AND v.status = 'Pending'
     """, (village, today))
-    due_today = cursor.fetchone()[0]
+    due_today = list(cursor.fetchone().values())[0]
 
     # 3. Overdue Children (Scheduled before today, status Pending)
     cursor.execute("""
         SELECT COUNT(*) FROM polio_vaccinations v
         JOIN polio_children c ON v.child_id = c.id
-        WHERE c.village = ? AND v.scheduled_date < ? AND v.status = 'Pending'
+        WHERE c.village = %s AND v.scheduled_date < %s AND v.status = 'Pending'
     """, (village, today))
-    overdue_count = cursor.fetchone()[0]
+    overdue_count = list(cursor.fetchone().values())[0]
 
     # 4. Coverage % (Children with all 3 doses completed)
     cursor.execute("""
         SELECT c.id, COUNT(v.id) as completed_doses
         FROM polio_children c
         LEFT JOIN polio_vaccinations v ON c.id = v.child_id AND v.status = 'Completed'
-        WHERE c.village = ?
+        WHERE c.village = %s
         GROUP BY c.id
     """, (village,))
     children_doses = cursor.fetchall()
@@ -67,12 +67,12 @@ def dashboard():
         SELECT c.name, v.scheduled_date
         FROM polio_vaccinations v
         JOIN polio_children c ON v.child_id = c.id
-        WHERE c.village = ? AND v.scheduled_date < ? AND v.status = 'Pending'
+        WHERE c.village = %s AND v.scheduled_date < %s AND v.status = 'Pending'
     """, (village, today))
     overdue_list = cursor.fetchall()
 
     # 6. OPV Stock Alert
-    cursor.execute("SELECT quantity FROM medicines WHERE medicine_name = 'OPV' AND village = ?", (village,))
+    cursor.execute("SELECT quantity FROM medicines WHERE medicine_name = 'OPV' AND village = %s", (village,))
     opv_row = cursor.fetchone()
     opv_stock = opv_row['quantity'] if opv_row else 0
 
@@ -81,7 +81,7 @@ def dashboard():
         SELECT c.id, c.name, c.village, c.dob, v.dose_number, v.status, v.scheduled_date
         FROM polio_vaccinations v
         JOIN polio_children c ON v.child_id = c.id
-        WHERE c.village = ? AND v.status = 'Pending' AND v.scheduled_date <= ?
+        WHERE c.village = %s AND v.status = 'Pending' AND v.scheduled_date <= %s
         ORDER BY v.scheduled_date ASC
     """, (village, today))
     todays_list = cursor.fetchall()
@@ -91,7 +91,7 @@ def dashboard():
         SELECT c.name, v.dose_number, v.administered_date, v.scheduled_date, v.status
         FROM polio_vaccinations v
         JOIN polio_children c ON v.child_id = c.id
-        WHERE c.village = ?
+        WHERE c.village = %s
         ORDER BY v.scheduled_date DESC
     """, (village,))
     history_list = cursor.fetchall()
@@ -108,7 +108,8 @@ def dashboard():
                            overdue_list=overdue_list,
                            opv_stock=opv_stock,
                            todays_list=todays_list,
-                           history_list=history_list)
+                           history_list=history_list,
+                           today_date_str=today)
 
 @polio_bp.route('/register', methods=['POST'])
 def register_child():
@@ -130,25 +131,25 @@ def register_child():
 
     cursor.execute("""
         INSERT INTO polio_children (name, dob, gender, parent_name, phone, village, address, aadhaar)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
     """, (name, dob, gender, parent_name, phone, village, address, aadhaar))
     
-    child_id = cursor.lastrowid
+    child_id = cursor.fetchone()['id']
 
     # Create Vaccination Schedule based on National Immunization Schedule (OPV 0, 1, 2, 3)
     dob_date = datetime.strptime(dob, "%Y-%m-%d")
     
     # Dose 0: At birth
-    cursor.execute("INSERT INTO polio_vaccinations (child_id, dose_number, scheduled_date, status) VALUES (?, 0, ?, 'Pending')", 
+    cursor.execute("INSERT INTO polio_vaccinations (child_id, dose_number, scheduled_date, status) VALUES (%s, 0, %s, 'Pending')", 
                    (child_id, dob_date.strftime("%Y-%m-%d")))
     # Dose 1: 6 weeks
-    cursor.execute("INSERT INTO polio_vaccinations (child_id, dose_number, scheduled_date, status) VALUES (?, 1, ?, 'Pending')", 
+    cursor.execute("INSERT INTO polio_vaccinations (child_id, dose_number, scheduled_date, status) VALUES (%s, 1, %s, 'Pending')", 
                    (child_id, (dob_date + timedelta(days=42)).strftime("%Y-%m-%d")))
     # Dose 2: 10 weeks
-    cursor.execute("INSERT INTO polio_vaccinations (child_id, dose_number, scheduled_date, status) VALUES (?, 2, ?, 'Pending')", 
+    cursor.execute("INSERT INTO polio_vaccinations (child_id, dose_number, scheduled_date, status) VALUES (%s, 2, %s, 'Pending')", 
                    (child_id, (dob_date + timedelta(days=70)).strftime("%Y-%m-%d")))
     # Dose 3: 14 weeks
-    cursor.execute("INSERT INTO polio_vaccinations (child_id, dose_number, scheduled_date, status) VALUES (?, 3, ?, 'Pending')", 
+    cursor.execute("INSERT INTO polio_vaccinations (child_id, dose_number, scheduled_date, status) VALUES (%s, 3, %s, 'Pending')", 
                    (child_id, (dob_date + timedelta(days=98)).strftime("%Y-%m-%d")))
 
     conn.commit()
@@ -171,28 +172,28 @@ def vaccinate(child_id, dose_number):
     # 1. Update Vaccination Record
     cursor.execute("""
         UPDATE polio_vaccinations 
-        SET status = 'Completed', administered_date = ? 
-        WHERE child_id = ? AND dose_number = ?
+        SET status = 'Completed', administered_date = %s 
+        WHERE child_id = %s AND dose_number = %s
     """, (today, child_id, dose_number))
 
     # 2. Inventory Integration: Deduct 1 OPV dose
-    cursor.execute("SELECT id, quantity FROM medicines WHERE medicine_name = 'OPV' AND village = ?", (village,))
+    cursor.execute("SELECT id, quantity FROM medicines WHERE medicine_name = 'OPV' AND village = %s", (village,))
     opv = cursor.fetchone()
     if opv and opv['quantity'] > 0:
         new_qty = opv['quantity'] - 1
-        cursor.execute("UPDATE medicines SET quantity = ? WHERE id = ?", (new_qty, opv['id']))
+        cursor.execute("UPDATE medicines SET quantity = %s WHERE id = %s", (new_qty, opv['id']))
         # Log transaction
         cursor.execute("""
             INSERT INTO transactions (medicine_id, action, quantity, remarks, created_at)
-            VALUES (?, 'Distributed', 1, 'OPV administered (Polio Module)', ?)
+            VALUES (%s, 'Distributed', 1, 'OPV administered (Polio Module)', %s)
         """, (opv['id'], today))
         
         # Log distribution
-        cursor.execute("SELECT name FROM polio_children WHERE id = ?", (child_id,))
+        cursor.execute("SELECT name FROM polio_children WHERE id = %s", (child_id,))
         child_name = cursor.fetchone()['name']
         cursor.execute("""
             INSERT INTO distributions (beneficiary_name, medicine_id, quantity, village, distributed_date, remarks)
-            VALUES (?, ?, 1, ?, ?, 'Polio Dose')
+            VALUES (%s, %s, 1, %s, %s, 'Polio Dose')
         """, (child_name, opv['id'], village, today))
 
     conn.commit()
@@ -212,17 +213,17 @@ def ai_insights():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    cursor.execute("SELECT COUNT(*) FROM polio_children WHERE village = ?", (village,))
-    total_registered = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM polio_children WHERE village = %s", (village,))
+    total_registered = list(cursor.fetchone().values())[0]
 
     cursor.execute("""
         SELECT COUNT(*) FROM polio_vaccinations v
         JOIN polio_children c ON v.child_id = c.id
-        WHERE c.village = ? AND v.scheduled_date <= ? AND v.status = 'Pending'
+        WHERE c.village = %s AND v.scheduled_date <= %s AND v.status = 'Pending'
     """, (village, today))
-    total_due = cursor.fetchone()[0]
+    total_due = list(cursor.fetchone().values())[0]
 
-    cursor.execute("SELECT quantity FROM medicines WHERE medicine_name = 'OPV' AND village = ?", (village,))
+    cursor.execute("SELECT quantity FROM medicines WHERE medicine_name = 'OPV' AND village = %s", (village,))
     opv_row = cursor.fetchone()
     opv_stock = opv_row['quantity'] if opv_row else 0
     

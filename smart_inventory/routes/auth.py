@@ -25,11 +25,11 @@ def asha_login():
         # Insert into database if not exists, or get existing
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM asha_workers WHERE village = ?;", (village,))
+        cursor.execute("SELECT * FROM asha_workers WHERE village = %s;", (village,))
         worker = cursor.fetchone()
         
         if not worker:
-            cursor.execute("INSERT INTO asha_workers (name, village) VALUES (?, ?);", (name, village))
+            cursor.execute("INSERT INTO asha_workers (name, village) VALUES (%s, %s);", (name, village))
             conn.commit()
         
         conn.close()
@@ -56,11 +56,11 @@ def mandal_login():
             
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM mandal_hospitals WHERE mandal = ?;", (mandal,))
+        cursor.execute("SELECT * FROM mandal_hospitals WHERE mandal = %s;", (mandal,))
         hospital = cursor.fetchone()
         
         if not hospital:
-            cursor.execute("INSERT INTO mandal_hospitals (name, mandal) VALUES (?, ?);", (name, mandal))
+            cursor.execute("INSERT INTO mandal_hospitals (name, mandal) VALUES (%s, %s);", (name, mandal))
             conn.commit()
             
         conn.close()

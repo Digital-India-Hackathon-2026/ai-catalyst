@@ -18,60 +18,60 @@ def asha_required(view):
 @asha_required
 def asha_dashboard():
     village = session['village']
-    today = datetime.now().strftime("%Y-%m-%d")
-    expiring_soon_date = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+    today = datetime.now().date()
+    expiring_soon_date = today + timedelta(days=30)
     
     conn = get_db_connection()
     cursor = conn.cursor()
     
     # 1. Total Medicines
-    cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = ?;", (village,))
-    total_medicines = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = %s;", (village,))
+    total_medicines = list(cursor.fetchone().values())[0]
     
     # 2. Available Stock
-    cursor.execute("SELECT SUM(quantity) FROM medicines WHERE village = ?;", (village,))
-    available_stock = cursor.fetchone()[0] or 0
+    cursor.execute("SELECT SUM(quantity) FROM medicines WHERE village = %s;", (village,))
+    available_stock = list(cursor.fetchone().values())[0] or 0
     
     # 3. Low Stock Medicines (excluding out of stock)
-    cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = ? AND quantity > 0 AND quantity <= minimum_stock AND expiry_date > ?;", (village, today))
-    low_stock_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = %s AND quantity > 0 AND quantity <= minimum_stock AND expiry_date > %s;", (village, today))
+    low_stock_count = list(cursor.fetchone().values())[0]
     
     # 3.5 Out of Stock Medicines
-    cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = ? AND quantity = 0;", (village,))
-    out_of_stock_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = %s AND quantity = 0;", (village,))
+    out_of_stock_count = list(cursor.fetchone().values())[0]
     
     # 4. Expired Medicines
-    cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = ? AND expiry_date <= ?;", (village, today))
-    expired_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = %s AND expiry_date <= %s;", (village, today))
+    expired_count = list(cursor.fetchone().values())[0]
     
     # 5. Medicines Expiring Soon
-    cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = ? AND expiry_date > ? AND expiry_date <= ?;", (village, today, expiring_soon_date))
-    expiring_soon_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = %s AND expiry_date > %s AND expiry_date <= %s;", (village, today, expiring_soon_date))
+    expiring_soon_count = list(cursor.fetchone().values())[0]
     
     # 6. Medicines Distributed Today
-    cursor.execute("SELECT SUM(quantity) FROM distributions WHERE village = ? AND distributed_date = ?;", (village, today))
-    distributed_today = cursor.fetchone()[0] or 0
+    cursor.execute("SELECT SUM(quantity) FROM distributions WHERE village = %s AND distributed_date = %s;", (village, today))
+    distributed_today = list(cursor.fetchone().values())[0] or 0
 
     # Phase 2 metrics
     # 7. Pending Requests
-    cursor.execute("SELECT COUNT(*) FROM medicine_requests WHERE village = ? AND status = 'Pending';", (village,))
-    pending_requests_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM medicine_requests WHERE village = %s AND status = 'Pending';", (village,))
+    pending_requests_count = list(cursor.fetchone().values())[0]
     
     # 8. Approved Requests
-    cursor.execute("SELECT COUNT(*) FROM medicine_requests WHERE village = ? AND status = 'Approved';", (village,))
-    approved_requests_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM medicine_requests WHERE village = %s AND status = 'Approved';", (village,))
+    approved_requests_count = list(cursor.fetchone().values())[0]
     
     # 9. Delivered Requests
-    cursor.execute("SELECT COUNT(*) FROM medicine_requests WHERE village = ? AND status = 'Delivered';", (village,))
-    delivered_requests_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM medicine_requests WHERE village = %s AND status = 'Delivered';", (village,))
+    delivered_requests_count = list(cursor.fetchone().values())[0]
     
     # Chart Data 1: Requests by Priority
-    cursor.execute("SELECT priority, COUNT(*) as count FROM medicine_requests WHERE village = ? GROUP BY priority;", (village,))
+    cursor.execute("SELECT priority, COUNT(*) as count FROM medicine_requests WHERE village = %s GROUP BY priority;", (village,))
     priority_rows = cursor.fetchall()
     priority_data = {row['priority']: row['count'] for row in priority_rows}
     
     # Chart Data 2: Requests by Status
-    cursor.execute("SELECT status, COUNT(*) as count FROM medicine_requests WHERE village = ? GROUP BY status;", (village,))
+    cursor.execute("SELECT status, COUNT(*) as count FROM medicine_requests WHERE village = %s GROUP BY status;", (village,))
     status_rows = cursor.fetchall()
     status_data = {row['status']: row['count'] for row in status_rows}
     
@@ -81,7 +81,7 @@ def asha_dashboard():
         SELECT m.category, SUM(d.quantity) as total 
         FROM distributions d
         JOIN medicines m ON d.medicine_id = m.id
-        WHERE d.village = ? AND d.distributed_date >= ?
+        WHERE d.village = %s AND d.distributed_date >= %s
         GROUP BY m.category;
     """, (village, thirty_days_ago))
     category_rows = cursor.fetchall()
@@ -93,7 +93,7 @@ def asha_dashboard():
     cursor.execute("""
         SELECT distributed_date, SUM(quantity) as total 
         FROM distributions
-        WHERE village = ? AND distributed_date >= ?
+        WHERE village = %s AND distributed_date >= %s
         GROUP BY distributed_date
         ORDER BY distributed_date ASC;
     """, (village, seven_days_ago))
@@ -104,7 +104,7 @@ def asha_dashboard():
     cursor.execute("""
         SELECT id, medicine_name, quantity, minimum_stock, expiry_date 
         FROM medicines 
-        WHERE village = ? AND (quantity < minimum_stock OR expiry_date <= ? OR (expiry_date > ? AND expiry_date <= ?));
+        WHERE village = %s AND (quantity < minimum_stock OR expiry_date <= %s OR (expiry_date > %s AND expiry_date <= %s));
     """, (village, today, today, expiring_soon_date))
     alerts_raw = cursor.fetchall()
     
@@ -166,9 +166,9 @@ def inventory():
     search_query = request.args.get('search', '').strip()
     category_filter = request.args.get('category', '').strip()
     
-    today = datetime.now().strftime("%Y-%m-%d")
-    expiring_soon_date = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
-    thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    today = datetime.now().date()
+    expiring_soon_date = today + timedelta(days=30)
+    thirty_days_ago = today - timedelta(days=30)
     
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -177,25 +177,25 @@ def inventory():
     cursor.execute("""
         SELECT medicine_id, SUM(quantity) as total_used 
         FROM distributions 
-        WHERE village = ? AND distributed_date >= ?
+        WHERE village = %s AND distributed_date >= %s
         GROUP BY medicine_id
     """, (village, thirty_days_ago))
     usage_data = {row['medicine_id']: row['total_used'] for row in cursor.fetchall()}
     
     # Get distinct categories for filtering
-    cursor.execute("SELECT DISTINCT category FROM medicines WHERE village = ?;", (village,))
+    cursor.execute("SELECT DISTINCT category FROM medicines WHERE village = %s;", (village,))
     categories = [row['category'] for row in cursor.fetchall()]
     
     # Build query
-    query = "SELECT * FROM medicines WHERE village = ?"
+    query = "SELECT * FROM medicines WHERE village = %s"
     params = [village]
     
     if search_query:
-        query += " AND medicine_name LIKE ?"
+        query += " AND medicine_name LIKE %s"
         params.append(f"%{search_query}%")
         
     if category_filter:
-        query += " AND category = ?"
+        query += " AND category = %s"
         params.append(category_filter)
         
     cursor.execute(query + " ORDER BY medicine_name ASC;", params)
@@ -286,15 +286,15 @@ def add_medicine():
         cursor.execute("""
             INSERT INTO medicines (
                 medicine_name, category, quantity, unit, batch_number, manufacturer, mfg_date, expiry_date, minimum_stock, village
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id;
         """, (name, category, quantity, unit, batch_number, manufacturer, mfg_date, expiry_date, minimum_stock, village))
         
-        med_id = cursor.lastrowid
+        med_id = cursor.fetchone()['id']
         
         # Save transaction log
         cursor.execute("""
             INSERT INTO transactions (medicine_id, action, quantity, remarks, created_at)
-            VALUES (?, 'Added', ?, ?, ?);
+            VALUES (%s, 'Added', %s, %s, %s);
         """, (med_id, quantity, "New medicine stocked in inventory.", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         
         conn.commit()
@@ -312,7 +312,7 @@ def edit_medicine(id):
     cursor = conn.cursor()
     
     # Check ownership
-    cursor.execute("SELECT * FROM medicines WHERE id = ? AND village = ?;", (id, session['village']))
+    cursor.execute("SELECT * FROM medicines WHERE id = %s AND village = %s;", (id, session['village']))
     medicine = cursor.fetchone()
     
     if not medicine:
@@ -349,15 +349,15 @@ def edit_medicine(id):
         # Update SQLite table
         cursor.execute("""
             UPDATE medicines 
-            SET medicine_name = ?, category = ?, quantity = ?, unit = ?, batch_number = ?, 
-                manufacturer = ?, mfg_date = ?, expiry_date = ?, minimum_stock = ?
-            WHERE id = ?;
+            SET medicine_name = %s, category = %s, quantity = %s, unit = %s, batch_number = %s, 
+                manufacturer = %s, mfg_date = %s, expiry_date = %s, minimum_stock = %s
+            WHERE id = %s;
         """, (name, category, quantity, unit, batch_number, manufacturer, mfg_date, expiry_date, minimum_stock, id))
         
         # Log Transaction
         cursor.execute("""
             INSERT INTO transactions (medicine_id, action, quantity, remarks, created_at)
-            VALUES (?, 'Updated', ?, ?, ?);
+            VALUES (%s, 'Updated', %s, %s, %s);
         """, (id, quantity, "Medicine parameters modified by worker.", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         
         conn.commit()
@@ -376,7 +376,7 @@ def delete_medicine(id):
     cursor = conn.cursor()
     
     # Check ownership
-    cursor.execute("SELECT * FROM medicines WHERE id = ? AND village = ?;", (id, session['village']))
+    cursor.execute("SELECT * FROM medicines WHERE id = %s AND village = %s;", (id, session['village']))
     medicine = cursor.fetchone()
     
     if not medicine:
@@ -385,12 +385,12 @@ def delete_medicine(id):
         return redirect(url_for('asha.inventory'))
         
     # Delete from DB
-    cursor.execute("DELETE FROM medicines WHERE id = ?;", (id,))
+    cursor.execute("DELETE FROM medicines WHERE id = %s;", (id,))
     
     # Log Transaction
     cursor.execute("""
         INSERT INTO transactions (medicine_id, action, quantity, remarks, created_at)
-        VALUES (?, 'Deleted', ?, ?, ?);
+        VALUES (%s, 'Deleted', %s, %s, %s);
     """, (id, medicine['quantity'], f"Medicine '{medicine['medicine_name']}' removed from database.", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     
     conn.commit()
@@ -407,7 +407,7 @@ def distribution():
     cursor = conn.cursor()
     
     # Fetch medicines in this village to populate dropdown
-    cursor.execute("SELECT id, medicine_name, quantity, unit FROM medicines WHERE village = ? AND quantity > 0 AND expiry_date > ?;", (village, datetime.now().strftime("%Y-%m-%d")))
+    cursor.execute("SELECT id, medicine_name, quantity, unit FROM medicines WHERE village = %s AND quantity > 0 AND expiry_date > %s;", (village, datetime.now().strftime("%Y-%m-%d")))
     medicines = cursor.fetchall()
     
     if request.method == 'POST':
@@ -431,7 +431,7 @@ def distribution():
             return render_template('distribution.html', medicines=medicines, form_data=request.form)
             
         # Verify medicine details and ownership
-        cursor.execute("SELECT * FROM medicines WHERE id = ? AND village = ?;", (med_id, village))
+        cursor.execute("SELECT * FROM medicines WHERE id = %s AND village = %s;", (med_id, village))
         medicine = cursor.fetchone()
         
         if not medicine:
@@ -445,16 +445,16 @@ def distribution():
         # 1. Save distribution record
         cursor.execute("""
             INSERT INTO distributions (beneficiary_name, medicine_id, quantity, village, distributed_date, remarks)
-            VALUES (?, ?, ?, ?, ?, ?);
+            VALUES (%s, %s, %s, %s, %s, %s);
         """, (beneficiary_name, med_id, qty, village, dist_date, remarks))
         
         # 2. Reduce medicine stock
-        cursor.execute("UPDATE medicines SET quantity = quantity - ? WHERE id = ?;", (qty, med_id))
+        cursor.execute("UPDATE medicines SET quantity = quantity - %s WHERE id = %s;", (qty, med_id))
         
         # 3. Log transaction
         cursor.execute("""
             INSERT INTO transactions (medicine_id, action, quantity, remarks, created_at)
-            VALUES (?, 'Distributed', ?, ?, ?);
+            VALUES (%s, 'Distributed', %s, %s, %s);
         """, (med_id, qty, f"Distributed to beneficiary: {beneficiary_name} in {village}.", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         
         conn.commit()
@@ -482,12 +482,12 @@ def transactions():
         SELECT t.*, m.medicine_name, m.unit, m.batch_number 
         FROM transactions t
         LEFT JOIN medicines m ON t.medicine_id = m.id
-        WHERE m.village = ?
+        WHERE m.village = %s
     """
     params = [village]
     
     if search_query:
-        query += " AND (m.medicine_name LIKE ? OR t.action LIKE ? OR t.remarks LIKE ?)"
+        query += " AND (m.medicine_name LIKE %s OR t.action LIKE %s OR t.remarks LIKE %s)"
         params.extend([f"%{search_query}%", f"%{search_query}%", f"%{search_query}%"])
         
     cursor.execute(query + " ORDER BY t.created_at DESC;", params)
@@ -511,7 +511,7 @@ def request_new():
         
         if not medicine_id or not requested_qty or not reason or not priority:
             flash("All fields are required.", "error")
-            cursor.execute("SELECT id, medicine_name, quantity, unit FROM medicines WHERE village = ?;", (village,))
+            cursor.execute("SELECT id, medicine_name, quantity, unit FROM medicines WHERE village = %s;", (village,))
             medicines = cursor.fetchall()
             conn.close()
             return render_template('request_form.html', medicines=medicines, form_data=request.form)
@@ -522,17 +522,17 @@ def request_new():
                 raise ValueError()
         except ValueError:
             flash("Requested quantity must be a positive integer.", "error")
-            cursor.execute("SELECT id, medicine_name, quantity, unit FROM medicines WHERE village = ?;", (village,))
+            cursor.execute("SELECT id, medicine_name, quantity, unit FROM medicines WHERE village = %s;", (village,))
             medicines = cursor.fetchall()
             conn.close()
             return render_template('request_form.html', medicines=medicines, form_data=request.form)
             
         # Get current stock
-        cursor.execute("SELECT quantity, medicine_name FROM medicines WHERE id = ? AND village = ?;", (medicine_id, village))
+        cursor.execute("SELECT quantity, medicine_name FROM medicines WHERE id = %s AND village = %s;", (medicine_id, village))
         med = cursor.fetchone()
         if not med:
             flash("Selected medicine not found in your inventory.", "error")
-            cursor.execute("SELECT id, medicine_name, quantity, unit FROM medicines WHERE village = ?;", (village,))
+            cursor.execute("SELECT id, medicine_name, quantity, unit FROM medicines WHERE village = %s;", (village,))
             medicines = cursor.fetchall()
             conn.close()
             return render_template('request_form.html', medicines=medicines, form_data=request.form)
@@ -544,13 +544,13 @@ def request_new():
         today_date = datetime.now().strftime("%Y-%m-%d")
         cursor.execute("""
             INSERT INTO medicine_requests (asha_worker, village, medicine_id, current_stock, requested_quantity, reason, priority, status, request_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', ?);
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 'Pending', %s);
         """, (session['name'], village, medicine_id, current_stock, qty, reason, priority, today_date))
         
         # Add notification for Mandal Hospital
         cursor.execute("""
-            INSERT INTO notifications (user_role, village, message, is_read, created_at)
-            VALUES ('mandal', NULL, ?, 0, ?);
+            INSERT INTO notifications (user_role, village, message, read_status, created_at)
+            VALUES ('mandal', NULL, %s, 0, %s);
         """, (f"New medicine request submitted by {session['name']} ({village}) for {med_name}.", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         
         conn.commit()
@@ -561,7 +561,7 @@ def request_new():
         
     # GET: Pre-populate medicine list
     pre_selected_id = request.args.get('medicine_id', '')
-    cursor.execute("SELECT id, medicine_name, quantity, unit FROM medicines WHERE village = ?;", (village,))
+    cursor.execute("SELECT id, medicine_name, quantity, unit FROM medicines WHERE village = %s;", (village,))
     medicines = cursor.fetchall()
     conn.close()
     
@@ -578,7 +578,7 @@ def request_history():
         SELECT r.*, m.medicine_name, m.unit, m.batch_number
         FROM medicine_requests r
         JOIN medicines m ON r.medicine_id = m.id
-        WHERE r.village = ?
+        WHERE r.village = %s
         ORDER BY r.request_date DESC, r.id DESC;
     """, (village,))
     requests_list = cursor.fetchall()
@@ -598,7 +598,7 @@ def request_view(req_id):
         SELECT r.*, m.medicine_name, m.unit, m.batch_number, m.expiry_date
         FROM medicine_requests r
         JOIN medicines m ON r.medicine_id = m.id
-        WHERE r.id = ? AND r.village = ?;
+        WHERE r.id = %s AND r.village = %s;
     """, (req_id, village))
     req = cursor.fetchone()
     
@@ -608,7 +608,7 @@ def request_view(req_id):
         return redirect(url_for('asha.request_history'))
         
     # Get dispatch details if applicable
-    cursor.execute("SELECT * FROM dispatches WHERE request_id = ?;", (req_id,))
+    cursor.execute("SELECT * FROM dispatches WHERE request_id = %s;", (req_id,))
     dispatch = cursor.fetchone()
     conn.close()
     
@@ -626,7 +626,7 @@ def delivery_confirm(req_id):
         SELECT r.*, m.medicine_name, m.unit 
         FROM medicine_requests r
         JOIN medicines m ON r.medicine_id = m.id
-        WHERE r.id = ? AND r.village = ? AND r.status = 'Dispatched';
+        WHERE r.id = %s AND r.village = %s AND r.status = 'Dispatched';
     """, (req_id, village))
     req = cursor.fetchone()
     
@@ -636,7 +636,7 @@ def delivery_confirm(req_id):
         return redirect(url_for('asha.request_history'))
         
     # Get dispatched quantity
-    cursor.execute("SELECT quantity_sent FROM dispatches WHERE request_id = ?;", (req_id,))
+    cursor.execute("SELECT quantity_sent FROM dispatches WHERE request_id = %s;", (req_id,))
     disp = cursor.fetchone()
     if not disp:
         conn.close()
@@ -648,26 +648,26 @@ def delivery_confirm(req_id):
     med_name = req['medicine_name']
     
     # 1. Update request status to 'Delivered'
-    cursor.execute("UPDATE medicine_requests SET status = 'Delivered' WHERE id = ?;", (req_id,))
+    cursor.execute("UPDATE medicine_requests SET status = 'Delivered' WHERE id = %s;", (req_id,))
     
     # 2. Increase stock of the medicine
-    cursor.execute("UPDATE medicines SET quantity = quantity + ? WHERE id = ?;", (qty_sent, med_id))
+    cursor.execute("UPDATE medicines SET quantity = quantity + %s WHERE id = %s;", (qty_sent, med_id))
     
     # 3. Log transaction
     cursor.execute("""
         INSERT INTO transactions (medicine_id, action, quantity, remarks, created_at)
-        VALUES (?, 'Added', ?, ?, ?);
+        VALUES (%s, 'Added', %s, %s, %s);
     """, (med_id, qty_sent, f"Stock replenished via request ID {req_id}.", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     
     # 4. Insert notifications
     cursor.execute("""
-        INSERT INTO notifications (user_role, village, message, is_read, created_at)
-        VALUES ('asha', ?, ?, 0, ?);
+        INSERT INTO notifications (user_role, village, message, read_status, created_at)
+        VALUES ('asha', %s, %s, 0, %s);
     """, (village, f"Your request for '{med_name}' has been DELIVERED.", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     
     cursor.execute("""
-        INSERT INTO notifications (user_role, village, message, is_read, created_at)
-        VALUES ('mandal', NULL, ?, 0, ?);
+        INSERT INTO notifications (user_role, village, message, read_status, created_at)
+        VALUES ('mandal', NULL, %s, 0, %s);
     """, (f"Delivery confirmed by {session['name']} ({village}) for {med_name}.", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     
     conn.commit()
@@ -686,13 +686,13 @@ def notifications():
     # Fetch notifications
     cursor.execute("""
         SELECT * FROM notifications 
-        WHERE user_role = 'asha' AND village = ?
+        WHERE user_role = 'asha' AND village = %s
         ORDER BY created_at DESC;
     """, (village,))
     notif_list = cursor.fetchall()
     
     # Mark as read
-    cursor.execute("UPDATE notifications SET is_read = 1 WHERE user_role = 'asha' AND village = ?;", (village,))
+    cursor.execute("UPDATE notifications SET read_status = 1 WHERE user_role = 'asha' AND village = %s;", (village,))
     conn.commit()
     conn.close()
     

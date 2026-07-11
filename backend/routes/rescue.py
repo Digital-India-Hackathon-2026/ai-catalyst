@@ -213,10 +213,10 @@ def get_least_loaded_unit(cursor, recommended_team: str) -> str:
     for unit in units:
         cursor.execute("""
             SELECT COALESCE(SUM(response_time_minutes), 0) FROM rescue_emergencies
-            WHERE nearest_rescue_team = ?
+            WHERE nearest_rescue_team = %s
               AND status NOT IN ('Mission Completed', 'Rescue Completed', 'Case Closed')
         """, (unit,))
-        burdens[unit] = cursor.fetchone()[0]
+        burdens[unit] = list(cursor.fetchone().values())[0]
 
     # Assign to unit with lowest total time burden
     sorted_units = sorted(burdens.items(), key=lambda x: x[1])
@@ -277,7 +277,7 @@ def generate_emergency_id(conn) -> str:
     """Generate unique sequential emergency ID like RES-0004."""
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM rescue_emergencies")
-    count = cursor.fetchone()[0]
+    count = list(cursor.fetchone().values())[0]
     return f"RES-{(count + 1):04d}"
 
 
@@ -350,7 +350,7 @@ def team_missions(unit_label):
     try:
         cursor.execute("""
             SELECT * FROM rescue_emergencies
-            WHERE nearest_rescue_team = ?
+            WHERE nearest_rescue_team = %s
               AND status NOT IN ('Case Closed')
             ORDER BY
               CASE severity
@@ -366,10 +366,10 @@ def team_missions(unit_label):
         # Calculate total time burden (active only)
         cursor.execute("""
             SELECT COALESCE(SUM(response_time_minutes), 0) FROM rescue_emergencies
-            WHERE nearest_rescue_team = ?
+            WHERE nearest_rescue_team = %s
               AND status NOT IN ('Mission Completed', 'Rescue Completed', 'Case Closed')
         """, (unit_label,))
-        total_burden = cursor.fetchone()[0]
+        total_burden = list(cursor.fetchone().values())[0]
         active_count = len([r for r in rows if r['status'] not in ('Mission Completed', 'Rescue Completed', 'Case Closed')])
 
         return jsonify({
@@ -499,7 +499,7 @@ def submit_emergency():
              confidence_score, status, submitted_at, updated_at,
              recommended_departments, nearest_rescue_team,
              ai_decision_summary, possible_risks, suggested_actions, ai_analysis_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             emergency_id, description, image_path, lat, lng, landmark,
             incident_type, severity, recommended_team, response_time,
@@ -517,7 +517,7 @@ def submit_emergency():
         )
         cursor.execute("""
         INSERT INTO rescue_audit_logs (emergency_id, event_type, action, actor, timestamp)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s)
         """, (emergency_id, event_type, action_msg, 'AI System', now))
 
         conn.commit()
@@ -565,10 +565,10 @@ def list_emergencies():
         params = []
 
         if severity_filter:
-            query += " AND severity = ?"
+            query += " AND severity = %s"
             params.append(severity_filter)
         if status_filter:
-            query += " AND status = ?"
+            query += " AND status = %s"
             params.append(status_filter)
 
         query += " ORDER BY submitted_at DESC"
@@ -608,7 +608,7 @@ def manage_emergency(eid):
     cursor = conn.cursor()
 
     try:
-        cursor.execute("SELECT * FROM rescue_emergencies WHERE emergency_id = ?", (eid,))
+        cursor.execute("SELECT * FROM rescue_emergencies WHERE emergency_id = %s", (eid,))
         row = cursor.fetchone()
         if not row:
             return jsonify({"error": "Emergency not found."}), 404
@@ -616,7 +616,7 @@ def manage_emergency(eid):
         if request.method == 'GET':
             emergency = dict(row)
             cursor.execute(
-                "SELECT * FROM rescue_audit_logs WHERE emergency_id = ? ORDER BY timestamp DESC",
+                "SELECT * FROM rescue_audit_logs WHERE emergency_id = %s ORDER BY timestamp DESC",
                 (eid,)
             )
             emergency['audit_trail'] = [dict(r) for r in cursor.fetchall()]
@@ -637,8 +637,8 @@ def manage_emergency(eid):
         # Update coordinates if provided
         if team_lat is not None and team_lng is not None:
             cursor.execute("""
-            UPDATE rescue_emergencies SET team_lat = ?, team_lng = ?, updated_at = ?
-            WHERE emergency_id = ?
+            UPDATE rescue_emergencies SET team_lat = %s, team_lng = %s, updated_at = %s
+            WHERE emergency_id = %s
             """, (team_lat, team_lng, now, eid))
 
         if not action and not status_input:
@@ -659,8 +659,8 @@ def manage_emergency(eid):
             return jsonify({"error": f"Unknown action: {action}"}), 400
 
         cursor.execute("""
-        UPDATE rescue_emergencies SET status = ?, supervisor_note = ?, updated_at = ?
-        WHERE emergency_id = ?
+        UPDATE rescue_emergencies SET status = %s, supervisor_note = %s, updated_at = %s
+        WHERE emergency_id = %s
         """, (new_status, note, now, eid))
 
         event_label = 'SUPERVISOR_UPDATE'
@@ -679,7 +679,7 @@ def manage_emergency(eid):
 
         cursor.execute("""
         INSERT INTO rescue_audit_logs (emergency_id, event_type, action, actor, timestamp)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s)
         """, (eid, event_label, action_description, actor, now))
 
         conn.commit()
@@ -732,7 +732,7 @@ def track_emergency(eid):
     cursor = conn.cursor()
 
     try:
-        cursor.execute("SELECT * FROM rescue_emergencies WHERE emergency_id = ?", (eid,))
+        cursor.execute("SELECT * FROM rescue_emergencies WHERE emergency_id = %s", (eid,))
         row = cursor.fetchone()
         if not row:
             return jsonify({"error": "Emergency not found."}), 404

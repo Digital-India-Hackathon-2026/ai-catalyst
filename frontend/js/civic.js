@@ -912,7 +912,7 @@ async function loadEmployeeDashboard() {
     document.getElementById("emp-meta-assigned").textContent = data.current_tasks.length + data.completed_tasks.length;
     document.getElementById("emp-meta-workload").textContent = data.current_tasks.length;
     document.getElementById("emp-meta-completed").textContent = data.completed_tasks.length;
-    document.getElementById("emp-meta-rating").textContent = `${data.rating.toFixed(1)} / 5.0`;
+    document.getElementById("emp-meta-rating").textContent = `${parseFloat(data.rating).toFixed(1)} / 5.0`;
     
     // Renders active jobs list table
     const tbody = document.getElementById("employee-task-table-body");
@@ -979,21 +979,39 @@ async function updateTaskProgress(cid, targetStatus, before_image = null, progre
         progress_image,
         completion_image,
         rejection_reason: comments,
-        actor: currentUser.full_name
+        actor: currentUser.full_name || currentUser.username || 'Employee'
       })
     });
     
     if (res.ok) {
-      alert(`Task status successfully updated to: ${targetStatus}`);
+      showToast(`✅ Status updated: ${targetStatus}`, 'success');
       loadEmployeeDashboard();
     } else {
       const data = await res.json();
-      alert(data.error || "Update status failed");
+      showToast(data.error || "Update failed", 'error');
     }
   } catch (err) {
     console.error(err);
-    alert("Connection error.");
+    showToast("Connection error.", 'error');
   }
+}
+window.updateTaskProgress = updateTaskProgress;
+
+function showToast(message, type = 'info') {
+  let toast = document.getElementById('action-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'action-toast';
+    toast.style.cssText = 'position:fixed;bottom:2rem;right:2rem;z-index:9999;padding:0.85rem 1.5rem;border-radius:0.75rem;font-weight:600;font-size:0.9rem;box-shadow:0 4px 20px rgba(0,0,0,0.2);transition:all 0.3s ease;';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.style.background = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6';
+  toast.style.color = '#fff';
+  toast.style.display = 'block';
+  toast.style.opacity = '1';
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.style.display = 'none', 300); }, 3000);
 }
 
 
@@ -1463,7 +1481,7 @@ document.getElementById("btn-submit-rejection").onclick = async () => {
   const reason = document.getElementById("reject-reason").value.trim();
   
   if (!reason) {
-    alert("Please provide a rejection reason.");
+    showToast("Please provide a rejection reason.", 'error');
     return;
   }
   

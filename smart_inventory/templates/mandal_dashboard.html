@@ -96,6 +96,7 @@
                         <th>Medicine</th>
                         <th>Qty</th>
                         <th>Status</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -119,11 +120,20 @@
                                         <span class="status-badge" style="background-color: #fee2e2; color: #991b1b; padding: 2px 6px; font-size: 0.75rem;">Rejected</span>
                                     {% endif %}
                                 </td>
+                                <td>
+                                    {% if req.status == 'Pending' %}
+                                        <a href="{{ url_for('mandal.request_view', req_id=req.id) }}" class="btn btn-outline btn-xs" style="padding: 2px 6px; font-size: 0.7rem; text-decoration: none;">Review</a>
+                                    {% elif req.status == 'Approved' %}
+                                        <a href="{{ url_for('mandal.dispatch_new', req_id=req.id) }}" class="btn btn-xs" style="padding: 2px 6px; font-size: 0.7rem; background-color: var(--primary); color: white; text-decoration: none;">Dispatch 🚚</a>
+                                    {% else %}
+                                        <a href="{{ url_for('mandal.request_view', req_id=req.id) }}" class="btn btn-outline btn-xs" style="padding: 2px 6px; font-size: 0.7rem; text-decoration: none;">View</a>
+                                    {% endif %}
+                                </td>
                             </tr>
                         {% endfor %}
                     {% else %}
                         <tr>
-                            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">No requests submitted.</td>
+                            <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">No requests submitted.</td>
                         </tr>
                     {% endif %}
                 </tbody>

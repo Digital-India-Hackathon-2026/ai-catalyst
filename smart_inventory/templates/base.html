@@ -145,7 +145,7 @@
                             <div class="notif-dropdown-body">
                                 {% if recent_notifications %}
                                     {% for notif in recent_notifications %}
-                                        <div class="notif-dropdown-item {% if notif.is_read == 0 %}unread{% endif %}">
+                                        <div class="notif-dropdown-item {% if notif.read_status == 0 %}unread{% endif %}">
                                             <p>{{ notif.message }}</p>
                                             <span class="notif-dropdown-time">{{ notif.created_at }}</span>
                                         </div>

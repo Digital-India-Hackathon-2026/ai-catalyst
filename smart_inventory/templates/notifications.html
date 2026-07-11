@@ -14,15 +14,15 @@
         {% if notifications %}
             {% for notif in notifications %}
                 <div style="padding: 16px 20px; border-radius: 8px; border: 1px solid var(--border); line-height: 1.4; display: flex; flex-direction: column; gap: 5px;
-                    {% if notif.is_read == 0 %}background-color: #eff6ff; border-color: #bfdbfe;{% else %}background-color: white;{% endif %}">
+                    {% if notif.read_status == 0 %}background-color: #eff6ff; border-color: #bfdbfe;{% else %}background-color: white;{% endif %}">
                     
-                    <div style="font-size: 0.95rem; color: var(--text-main); font-weight: {% if notif.is_read == 0 %}600{% else %}500{% endif %};">
+                    <div style="font-size: 0.95rem; color: var(--text-main); font-weight: {% if notif.read_status == 0 %}600{% else %}500{% endif %};">
                         {{ notif.message }}
                     </div>
                     
                     <div style="font-size: 0.78rem; color: var(--text-muted); display: flex; align-items: center; justify-content: space-between;">
                         <span>Timestamp: {{ notif.created_at }}</span>
-                        {% if notif.is_read == 0 %}
+                        {% if notif.read_status == 0 %}
                             <span class="status-badge" style="background-color: var(--primary-light); color: white; font-size: 0.65rem;">New</span>
                         {% endif %}
                     </div>

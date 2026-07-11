@@ -24,36 +24,36 @@ def mandal_dashboard():
     
     # 1. Total Villages (Count from ASHA workers)
     cursor.execute("SELECT COUNT(DISTINCT village) FROM asha_workers;")
-    total_villages = cursor.fetchone()[0]
+    total_villages = list(cursor.fetchone().values())[0]
     
     # 2. Total Medicines (Sum of all quantities across the system)
     cursor.execute("SELECT SUM(quantity) FROM medicines;")
-    total_medicines = cursor.fetchone()[0] or 0
+    total_medicines = list(cursor.fetchone().values())[0] or 0
     
     # 3. Low Stock Cases (Total items across system < minimum_stock)
-    cursor.execute("SELECT COUNT(*) FROM medicines WHERE quantity < minimum_stock AND expiry_date > ?;", (today,))
-    low_stock_cases = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM medicines WHERE quantity < minimum_stock AND expiry_date > %s;", (today,))
+    low_stock_cases = list(cursor.fetchone().values())[0]
     
     # 4. Expired Medicines (Total expired across system)
-    cursor.execute("SELECT COUNT(*) FROM medicines WHERE expiry_date <= ?;", (today,))
-    expired_medicines = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM medicines WHERE expiry_date <= %s;", (today,))
+    expired_medicines = list(cursor.fetchone().values())[0]
 
     # Phase 2 metrics
     # 5. Total Requests
     cursor.execute("SELECT COUNT(*) FROM medicine_requests;")
-    total_requests = cursor.fetchone()[0]
+    total_requests = list(cursor.fetchone().values())[0]
 
     # 6. Pending Requests
     cursor.execute("SELECT COUNT(*) FROM medicine_requests WHERE status = 'Pending';")
-    pending_requests = cursor.fetchone()[0]
+    pending_requests = list(cursor.fetchone().values())[0]
 
     # 7. Approved Requests
     cursor.execute("SELECT COUNT(*) FROM medicine_requests WHERE status = 'Approved';")
-    approved_requests = cursor.fetchone()[0]
+    approved_requests = list(cursor.fetchone().values())[0]
 
     # 8. Delivered Requests
     cursor.execute("SELECT COUNT(*) FROM medicine_requests WHERE status = 'Delivered';")
-    delivered_requests = cursor.fetchone()[0]
+    delivered_requests = list(cursor.fetchone().values())[0]
     
     # 9. Recent Requests
     cursor.execute("""
@@ -80,7 +80,7 @@ def mandal_dashboard():
     requests_by_village = {row['village']: row['count'] for row in village_rows}
 
     # 12. Chart Data 2: Monthly Request Trends
-    cursor.execute("SELECT strftime('%Y-%m', request_date) as month, COUNT(*) as count FROM medicine_requests GROUP BY month ORDER BY month ASC;")
+    cursor.execute("SELECT to_char(request_date, 'YYYY-MM') as month, COUNT(*) as count FROM medicine_requests GROUP BY month ORDER BY month ASC;")
     month_rows = cursor.fetchall()
     monthly_trends = {row['month']: row['count'] for row in month_rows}
 
@@ -98,14 +98,14 @@ def mandal_dashboard():
         v_name = worker['village']
         w_name = worker['name']
         
-        cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = ?;", (v_name,))
-        v_meds = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = %s;", (v_name,))
+        v_meds = list(cursor.fetchone().values())[0]
         
-        cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = ? AND quantity < minimum_stock AND expiry_date > ?;", (v_name, today))
-        v_low = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = %s AND quantity < minimum_stock AND expiry_date > %s;", (v_name, today))
+        v_low = list(cursor.fetchone().values())[0]
         
-        cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = ? AND expiry_date <= ?;", (v_name, today))
-        v_expired = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM medicines WHERE village = %s AND expiry_date <= %s;", (v_name, today))
+        v_expired = list(cursor.fetchone().values())[0]
         
         village_reports.append({
             'village': v_name,
@@ -140,14 +140,14 @@ def village_inventory(village_name):
     search_query = request.args.get('search', '').strip()
     category_filter = request.args.get('category', '').strip()
     
-    today = datetime.now().strftime("%Y-%m-%d")
-    expiring_soon_date = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+    today = datetime.now().date()
+    expiring_soon_date = today + timedelta(days=30)
     
     conn = get_db_connection()
     cursor = conn.cursor()
     
     # Check if village is valid (exists in asha_workers)
-    cursor.execute("SELECT name FROM asha_workers WHERE village = ?;", (village_name,))
+    cursor.execute("SELECT name FROM asha_workers WHERE village = %s;", (village_name,))
     worker = cursor.fetchone()
     
     if not worker:
@@ -158,19 +158,19 @@ def village_inventory(village_name):
     asha_name = worker['name']
     
     # Get distinct categories for filtering
-    cursor.execute("SELECT DISTINCT category FROM medicines WHERE village = ?;", (village_name,))
+    cursor.execute("SELECT DISTINCT category FROM medicines WHERE village = %s;", (village_name,))
     categories = [row['category'] for row in cursor.fetchall()]
     
     # Build query
-    query = "SELECT * FROM medicines WHERE village = ?"
+    query = "SELECT * FROM medicines WHERE village = %s"
     params = [village_name]
     
     if search_query:
-        query += " AND medicine_name LIKE ?"
+        query += " AND medicine_name LIKE %s"
         params.append(f"%{search_query}%")
         
     if category_filter:
-        query += " AND category = ?"
+        query += " AND category = %s"
         params.append(category_filter)
         
     cursor.execute(query + " ORDER BY medicine_name ASC;", params)
@@ -224,7 +224,7 @@ def request_view(req_id):
         SELECT r.*, m.medicine_name, m.unit, m.batch_number, m.expiry_date
         FROM medicine_requests r
         JOIN medicines m ON r.medicine_id = m.id
-        WHERE r.id = ?;
+        WHERE r.id = %s;
     """, (req_id,))
     req = cursor.fetchone()
     
@@ -233,7 +233,7 @@ def request_view(req_id):
         flash("Request not found.", "error")
         return redirect(url_for('mandal.mandal_dashboard'))
         
-    cursor.execute("SELECT * FROM dispatches WHERE request_id = ?;", (req_id,))
+    cursor.execute("SELECT * FROM dispatches WHERE request_id = %s;", (req_id,))
     dispatch = cursor.fetchone()
     conn.close()
     
@@ -245,7 +245,7 @@ def request_approve(req_id):
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    cursor.execute("SELECT r.*, m.medicine_name FROM medicine_requests r JOIN medicines m ON r.medicine_id = m.id WHERE r.id = ? AND r.status = 'Pending';", (req_id,))
+    cursor.execute("SELECT r.*, m.medicine_name FROM medicine_requests r JOIN medicines m ON r.medicine_id = m.id WHERE r.id = %s AND r.status = 'Pending';", (req_id,))
     req = cursor.fetchone()
     
     if not req:
@@ -253,13 +253,13 @@ def request_approve(req_id):
         flash("Request not found or not pending.", "error")
         return redirect(url_for('mandal.mandal_dashboard'))
         
-    cursor.execute("UPDATE medicine_requests SET status = 'Approved' WHERE id = ?;", (req_id,))
+    cursor.execute("UPDATE medicine_requests SET status = 'Approved' WHERE id = %s;", (req_id,))
     
     # Notify ASHA worker
     msg = f"Your request for '{req['medicine_name']}' has been APPROVED by Mandal Hospital."
     cursor.execute("""
-        INSERT INTO notifications (user_role, village, message, is_read, created_at)
-        VALUES ('asha', ?, ?, 0, ?);
+        INSERT INTO notifications (user_role, village, message, read_status, created_at)
+        VALUES ('asha', %s, %s, 0, %s);
     """, (req['village'], msg, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     
     conn.commit()
@@ -279,7 +279,7 @@ def request_reject(req_id):
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    cursor.execute("SELECT r.*, m.medicine_name FROM medicine_requests r JOIN medicines m ON r.medicine_id = m.id WHERE r.id = ? AND r.status = 'Pending';", (req_id,))
+    cursor.execute("SELECT r.*, m.medicine_name FROM medicine_requests r JOIN medicines m ON r.medicine_id = m.id WHERE r.id = %s AND r.status = 'Pending';", (req_id,))
     req = cursor.fetchone()
     
     if not req:
@@ -287,13 +287,13 @@ def request_reject(req_id):
         flash("Request not found or not pending.", "error")
         return redirect(url_for('mandal.mandal_dashboard'))
         
-    cursor.execute("UPDATE medicine_requests SET status = 'Rejected', rejection_reason = ? WHERE id = ?;", (reason, req_id))
+    cursor.execute("UPDATE medicine_requests SET status = 'Rejected', rejection_reason = %s WHERE id = %s;", (reason, req_id))
     
     # Notify ASHA worker
     msg = f"Your request for '{req['medicine_name']}' was REJECTED. Reason: {reason}."
     cursor.execute("""
-        INSERT INTO notifications (user_role, village, message, is_read, created_at)
-        VALUES ('asha', ?, ?, 0, ?);
+        INSERT INTO notifications (user_role, village, message, read_status, created_at)
+        VALUES ('asha', %s, %s, 0, %s);
     """, (req['village'], msg, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     
     conn.commit()
@@ -312,7 +312,7 @@ def dispatch_new(req_id):
         SELECT r.*, m.medicine_name, m.unit, m.batch_number 
         FROM medicine_requests r 
         JOIN medicines m ON r.medicine_id = m.id 
-        WHERE r.id = ? AND r.status = 'Approved';
+        WHERE r.id = %s AND r.status = 'Approved';
     """, (req_id,))
     req = cursor.fetchone()
     
@@ -342,20 +342,20 @@ def dispatch_new(req_id):
             return render_template('dispatch_form.html', request=req, form_data=request.form)
             
         # 1. Update request status to 'Dispatched'
-        cursor.execute("UPDATE medicine_requests SET status = 'Dispatched' WHERE id = ?;", (req_id,))
+        cursor.execute("UPDATE medicine_requests SET status = 'Dispatched' WHERE id = %s;", (req_id,))
         
         # 2. Insert dispatch record
         cursor.execute("""
             INSERT INTO dispatches (request_id, quantity_sent, dispatch_date, delivery_notes)
-            VALUES (?, ?, ?, ?);
+            VALUES (%s, %s, %s, %s);
         """, (req_id, sent_val, dispatch_date, f"{notes} (Vehicle: {vehicle_num})" if vehicle_num else notes))
         
         # 3. Notify ASHA worker
         vehicle_msg = f" (Vehicle: {vehicle_num})" if vehicle_num else ""
         msg = f"Medicines for request '{req['medicine_name']}' have been DISPATCHED{vehicle_msg}."
         cursor.execute("""
-            INSERT INTO notifications (user_role, village, message, is_read, created_at)
-            VALUES ('asha', ?, ?, 0, ?);
+            INSERT INTO notifications (user_role, village, message, read_status, created_at)
+            VALUES ('asha', %s, %s, 0, %s);
         """, (req['village'], msg, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         
         conn.commit()
@@ -379,7 +379,7 @@ def notifications():
     notif_list = cursor.fetchall()
     
     # Mark as read
-    cursor.execute("UPDATE notifications SET is_read = 1 WHERE user_role = 'mandal';")
+    cursor.execute("UPDATE notifications SET read_status = 1 WHERE user_role = 'mandal';")
     conn.commit()
     conn.close()
     
@@ -409,13 +409,13 @@ def reports():
     params = []
     
     if village_filter:
-        query += " AND r.village = ?"
+        query += " AND r.village = %s"
         params.append(village_filter)
     if status_filter:
-        query += " AND r.status = ?"
+        query += " AND r.status = %s"
         params.append(status_filter)
     if priority_filter:
-        query += " AND r.priority = ?"
+        query += " AND r.priority = %s"
         params.append(priority_filter)
         
     cursor.execute(query + " ORDER BY r.request_date DESC, r.id DESC;", params)

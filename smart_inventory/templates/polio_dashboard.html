@@ -134,7 +134,7 @@
                     <td>Dose {{ item.dose_number }}</td>
                     <td>{{ item.scheduled_date }}</td>
                     <td>
-                        {% if item.scheduled_date < today_date_str %}
+                        {% if item.scheduled_date|string < today_date_str %}
                         <span class="status-badge" style="background: #fee2e2; color: #b91c1c; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold;">Overdue</span>
                         {% else %}
                         <span class="status-badge" style="background: #e0f2fe; color: #0369a1; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold;">Due Today</span>

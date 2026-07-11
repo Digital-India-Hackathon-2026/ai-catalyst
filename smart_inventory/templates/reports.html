@@ -80,13 +80,14 @@
                     <th>Priority</th>
                     <th>Request Date</th>
                     <th>Status</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% if reports %}
                     {% for req in reports %}
                         <tr>
-                            <td><strong>#REQ-{{ req.id }}</strong></td>
+                            <td><a href="{{ url_for('mandal.request_view', req_id=req.id) }}" style="font-weight: 600; text-decoration: none; color: var(--primary);">#REQ-{{ req.id }}</a></td>
                             <td>{{ req.asha_worker }}</td>
                             <td>{{ req.village }}</td>
                             <td>{{ req.medicine_name }}</td>
@@ -116,11 +117,26 @@
                                     <span class="status-badge" style="background-color: #fee2e2; color: #991b1b;">Rejected</span>
                                 {% endif %}
                             </td>
+                            <td>
+                                {% if req.status == 'Pending' %}
+                                    <a href="{{ url_for('mandal.request_view', req_id=req.id) }}" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.75rem; text-decoration: none;" title="Review Request">
+                                        <i class="fa-solid fa-clipboard-question"></i> Review &rarr;
+                                    </a>
+                                {% elif req.status == 'Approved' %}
+                                    <a href="{{ url_for('mandal.dispatch_new', req_id=req.id) }}" class="btn" style="padding: 4px 8px; font-size: 0.75rem; background-color: var(--primary); color: white; text-decoration: none;" title="Create Dispatch Record">
+                                        <i class="fa-solid fa-truck"></i> Dispatch 🚚
+                                    </a>
+                                {% else %}
+                                    <a href="{{ url_for('mandal.request_view', req_id=req.id) }}" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.75rem; text-decoration: none;" title="View Details">
+                                        <i class="fa-solid fa-eye"></i> View
+                                    </a>
+                                {% endif %}
+                            </td>
                         </tr>
                     {% endfor %}
                 {% else %}
                     <tr>
-                        <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                        <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 30px;">
                             No replenishment records match the selected filters.
                         </td>
                     </tr>

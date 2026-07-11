@@ -10,7 +10,7 @@ from utils.db import get_db_connection
 chatbot_bp = Blueprint('chatbot', __name__)
 
 # Load .env manually to avoid extra pip dependencies
-env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
+env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
 if os.path.exists(env_path):
     with open(env_path) as f:
         for line in f:
@@ -38,7 +38,7 @@ def chat():
     cursor.execute("""
         SELECT medicine_name, category, quantity, unit, minimum_stock
         FROM medicines
-        WHERE village = ?
+        WHERE village = %s
     """, (village,))
     inventory = cursor.fetchall()
     
@@ -58,7 +58,7 @@ def chat():
         SELECT medicine_name, SUM(d.quantity) as total_given
         FROM distributions d
         JOIN medicines m ON d.medicine_id = m.id
-        WHERE d.village = ? AND d.distributed_date = ?
+        WHERE d.village = %s AND d.distributed_date = %s
         GROUP BY medicine_name
     """, (village, today_str))
     distributions = cursor.fetchall()
@@ -72,7 +72,7 @@ def chat():
         SELECT m.medicine_name, r.requested_quantity, r.status
         FROM medicine_requests r
         JOIN medicines m ON r.medicine_id = m.id
-        WHERE r.village = ? AND r.status = 'Pending'
+        WHERE r.village = %s AND r.status = 'Pending'
     """, (village,))
     pending_requests = cursor.fetchall()
     
@@ -117,7 +117,7 @@ Reply only in the dominant language.
 Examples
 
 User:
-How many ORS packets are available?
+How many ORS packets are available%s
 
 Assistant:
 There are 24 ORS packets currently available.
@@ -133,7 +133,7 @@ Assistant:
 ----------------------
 
 User:
-Paracetamol stock ఎంత ఉంది?
+Paracetamol stock ఎంత ఉంది%s
 
 Assistant:
 మీ దగ్గర ప్రస్తుతం 120 Paracetamol మాత్రలు ఉన్నాయి.
