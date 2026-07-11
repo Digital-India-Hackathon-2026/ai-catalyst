@@ -13,7 +13,7 @@ rescue_bp = Blueprint('rescue', __name__)
 
 RESCUE_RULES = [
     {
-        'keywords': ['fire', 'blaze', 'burning', 'flames', 'smoke', 'arson', 'inferno'],
+        'keywords': ['fire', 'blaze', 'burning', 'flames', 'smoke', 'arson', 'inferno', 'आग', 'जल रहा', 'धुआं', 'మంటలు', 'కాల్చడం', 'పొగ', 'అగ్ని'],
         'incident_type': 'Fire Emergency',
         'severity': 'Critical',
         'team': 'Fire Response Unit',
@@ -23,7 +23,7 @@ RESCUE_RULES = [
         'nearest_team': 'Ameerpet Fire Station Unit'
     },
     {
-        'keywords': ['flood', 'drowning', 'swept', 'submerged', 'waterlogged', 'drowning', 'flash flood', 'washed away'],
+        'keywords': ['flood', 'drowning', 'swept', 'submerged', 'waterlogged', 'flash flood', 'washed away', 'बाढ़', 'डूब रहा', 'पानी भर', 'వరద', 'మునిగి', 'వరదలు', 'నీరు నిలిచింది'],
         'incident_type': 'Flood / Water Rescue',
         'severity': 'Critical',
         'team': 'Flood Rescue (NDRF)',
@@ -33,7 +33,7 @@ RESCUE_RULES = [
         'nearest_team': 'Secunderabad NDRF Battalion'
     },
     {
-        'keywords': ['collapse', 'collapsed', 'building fell', 'trapped', 'rubble', 'debris', 'structure', 'sinkhole', 'earthquake'],
+        'keywords': ['collapse', 'collapsed', 'building fell', 'trapped', 'rubble', 'debris', 'structure', 'sinkhole', 'earthquake', 'ढह गया', 'भूकंप', 'मलबे', 'కూలిపోయింది', 'భూకంపం', 'శిథిలాలు'],
         'incident_type': 'Structural Collapse',
         'severity': 'Critical',
         'team': 'SDRF Structural Response Team',
@@ -43,7 +43,7 @@ RESCUE_RULES = [
         'nearest_team': 'Jubilee Hills SDRF Team'
     },
     {
-        'keywords': ['gas leak', 'gas pipe', 'chemical', 'toxic', 'hazmat', 'poison', 'fumes', 'lpg', 'cylinder blast'],
+        'keywords': ['gas leak', 'gas pipe', 'chemical', 'toxic', 'hazmat', 'poison', 'fumes', 'lpg', 'cylinder blast', 'गैस रिसाव', 'जहरीला', 'रासायनिक', 'గ్యాస్ లీక్', 'విషపూరిత', 'రసాయన'],
         'incident_type': 'Hazardous Material Incident',
         'severity': 'High',
         'team': 'Hazmat Response Unit',
@@ -53,7 +53,7 @@ RESCUE_RULES = [
         'nearest_team': 'Gachibowli Hazmat Station'
     },
     {
-        'keywords': ['accident', 'crash', 'collision', 'vehicle overturned', 'truck', 'bus', 'car', 'road', 'highway', 'injured', 'injury', 'hit'],
+        'keywords': ['accident', 'crash', 'collision', 'vehicle overturned', 'truck', 'bus', 'car', 'road', 'highway', 'injured', 'injury', 'hit', 'दुर्घटना', 'चोट', 'टक्कर', 'ప్రమాదం', 'గాయం', 'ఢీకొట్టి'],
         'incident_type': 'Road Accident',
         'severity': 'High',
         'team': 'Emergency Response Team',
@@ -63,7 +63,7 @@ RESCUE_RULES = [
         'nearest_team': 'Madhapur Patrol Unit'
     },
     {
-        'keywords': ['power line', 'electric wire', 'live wire', 'fallen wire', 'electrocution', 'transformer blast'],
+        'keywords': ['power line', 'electric wire', 'live wire', 'fallen wire', 'electrocution', 'transformer blast', 'बिजली', 'करंट', 'విద్యుత్', 'కరెంట్'],
         'incident_type': 'Electrical Emergency',
         'severity': 'Medium',
         'team': 'Electrical Emergency Unit',
@@ -73,7 +73,7 @@ RESCUE_RULES = [
         'nearest_team': 'Begumpet Power Grid Response'
     },
     {
-        'keywords': ['fallen tree', 'tree fell', 'uprooted', 'tree blocking', 'storm damage', 'windstorm', 'cyclone damage'],
+        'keywords': ['fallen tree', 'tree fell', 'uprooted', 'tree blocking', 'storm damage', 'windstorm', 'cyclone damage', 'पेड़ गिर', 'तूफान', 'చెట్టు పడిపోయింది', 'తుఫాను'],
         'incident_type': 'Fallen Tree / Debris',
         'severity': 'Medium',
         'team': 'Civic Emergency Team',
@@ -83,7 +83,7 @@ RESCUE_RULES = [
         'nearest_team': 'Kondapur Municipal Crew'
     },
     {
-        'keywords': ['landslide', 'mudslide', 'mud', 'hillside', 'slope'],
+        'keywords': ['landslide', 'mudslide', 'mud', 'hillside', 'slope', 'भूस्खलन', 'కొండచరియలు'],
         'incident_type': 'Landslide / Erosion',
         'severity': 'High',
         'team': 'SDRF Structural Response Team',
@@ -408,58 +408,74 @@ def submit_emergency():
         print(f"[Rescue Route] Gemini execution/parsing error: {gemini_err}")
         gemini_raw_result = None
 
-    # Fallback to rules if Gemini fails or is unconfigured
-    if not gemini_raw_result or not isinstance(gemini_raw_result, dict):
-        print("[Rescue Route] Falling back to rule-based classification.")
-        gemini_raw_result = run_ai_analysis(description)
+    # 2. Unpack dual-language Gemini response into system_analysis and citizen_analysis.
+    #    If Gemini returns the new two-key format, split them.
+    #    If it returns the old flat format or fails, fall back to rule-based engine
+    #    and wrap the result into both keys for consistent downstream handling.
+    citizen_analysis = None
 
-    # 2. Extract and Sanitize fields
-    incident_type = gemini_raw_result.get('incident_type', 'General Emergency')
-    severity = gemini_raw_result.get('severity', 'Medium')
+    if gemini_raw_result and isinstance(gemini_raw_result, dict):
+        if 'system_analysis' in gemini_raw_result and 'citizen_analysis' in gemini_raw_result:
+            # New dual-language format
+            system_analysis  = gemini_raw_result['system_analysis']
+            citizen_analysis = gemini_raw_result['citizen_analysis']
+        else:
+            # Gemini returned old flat format — use it as system_analysis, no citizen translation
+            system_analysis  = gemini_raw_result
+            citizen_analysis = None
+    else:
+        # Fallback: rule-based engine
+        print("[Rescue Route] Falling back to rule-based classification.")
+        system_analysis  = run_ai_analysis(description)
+        citizen_analysis = None
+
+    # 3. Extract and Sanitize fields — all from system_analysis
+    incident_type = system_analysis.get('incident_type', 'General Emergency')
+    severity = system_analysis.get('severity', 'Medium')
     if severity not in ('Low', 'Medium', 'High', 'Critical'):
         severity = 'Medium'
 
     try:
-        confidence = int(gemini_raw_result.get('confidence_score', 85))
+        confidence = int(system_analysis.get('confidence_score', 85))
     except:
         confidence = 85
 
     try:
-        response_time = int(gemini_raw_result.get('estimated_response_time', 15))
+        response_time = int(system_analysis.get('estimated_response_time', 15))
     except:
         response_time = 15
 
-    ai_summary = gemini_raw_result.get('ai_summary', 'AI analyzed emergency report.')
-    
+    ai_summary = system_analysis.get('ai_summary', 'AI analyzed emergency report.')
+
     # Handle list types safely for SQL storage (join by comma)
-    req_depts = gemini_raw_result.get('required_departments')
+    req_depts = system_analysis.get('required_departments')
     if isinstance(req_depts, list):
         depts_str = ', '.join(req_depts)
     else:
         depts_str = str(req_depts or 'Disaster Management')
 
-    risks = gemini_raw_result.get('possible_risks')
+    risks = system_analysis.get('possible_risks')
     if isinstance(risks, list):
         risks_str = ', '.join(risks)
     else:
         risks_str = str(risks or 'Potential hazard at scene.')
 
-    actions = gemini_raw_result.get('suggested_rescue_actions')
+    actions = system_analysis.get('suggested_rescue_actions')
     if isinstance(actions, list):
         actions_str = ', '.join(actions)
     else:
         actions_str = str(actions or 'Dispatch response team.')
 
-    # Fallback landmark from Gemini if citizen did not enter one
-    ai_landmark = gemini_raw_result.get('landmark', '')
+    # Fallback landmark from system_analysis if citizen did not enter one
+    ai_landmark = system_analysis.get('landmark', '')
     landmark = citizen_landmark if citizen_landmark else ai_landmark
 
-    # 3. Backend Operational Decisions: Assign team based on backend logic
+    # 4. Backend Operational Decisions: Assign team based on backend logic (never from Gemini)
     recommended_team = determine_team_from_incident(incident_type, description)
     default_nearest = get_default_nearest_team(recommended_team)
 
-    # Serialized full Gemini response
-    ai_analysis_json = json.dumps(gemini_raw_result)
+    # Serialized full Gemini response (both keys if present, otherwise system_analysis only)
+    ai_analysis_json = json.dumps(gemini_raw_result if gemini_raw_result else system_analysis)
 
     status = get_initial_status(severity)
     now = datetime.now().isoformat()
@@ -506,7 +522,8 @@ def submit_emergency():
 
         conn.commit()
 
-        return jsonify({
+        # 5. Build API response — include citizen_analysis for localized Citizen Portal display
+        response_payload = {
             "message": "Emergency submitted successfully.",
             "emergency_id": emergency_id,
             "ai_result": {
@@ -517,12 +534,17 @@ def submit_emergency():
                 "confidence_score": confidence,
                 "status": status
             }
-        }), 201
+        }
+        if citizen_analysis and isinstance(citizen_analysis, dict):
+            response_payload["citizen_analysis"] = citizen_analysis
+
+        return jsonify(response_payload), 201
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
+
 
 
 @rescue_bp.route('/api/rescue/emergencies', methods=['GET'])
@@ -748,8 +770,8 @@ def transcribe_speech():
         from services.deepgram_service import transcribe_audio
         audio_data = file.read()
         content_type = file.content_type or 'audio/webm'
-        transcript = transcribe_audio(audio_data, content_type)
-        return jsonify({"transcript": transcript})
+        transcript, language = transcribe_audio(audio_data, content_type)
+        return jsonify({"transcript": transcript, "language": language})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

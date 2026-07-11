@@ -133,10 +133,11 @@ function formatTime(isoStr) {
   });
 }
 
-function severityBadge(severity) {
+function severityBadge(severity, displayLabel) {
   const s = (severity || '').toLowerCase();
   const icons = { critical: '🔴', high: '🟠', medium: '🟡', low: '🟢' };
-  return `<span class="badge-severity ${s}">${icons[s] || ''} ${severity}</span>`;
+  const label = displayLabel || severity;
+  return `<span class="badge-severity ${s}">${icons[s] || ''} ${label}</span>`;
 }
 
 let googleMapsLoadedPromise = null;
@@ -787,22 +788,47 @@ function renderResultPage(e, root) {
     'Pending Review':              '📋',
   }[e.status] || '📋';
 
-  // Parse complete Gemini JSON response
-  let gemini = {};
+  // ── Parse Gemini AI JSON stored in the DB ──────────────────────────────
+  // Supports both:
+  //   • New dual-language format: { system_analysis: {...}, citizen_analysis: {...} }
+  //   • Old flat format:          { incident_type, ai_summary, ... }
+  let geminiRaw = {};
   try {
-    if (e.ai_analysis_json) {
-      gemini = JSON.parse(e.ai_analysis_json);
-    }
+    if (e.ai_analysis_json) geminiRaw = JSON.parse(e.ai_analysis_json);
   } catch (err) {
-    console.error("Error parsing ai_analysis_json:", err);
+    console.error('Error parsing ai_analysis_json:', err);
   }
 
-  const aiSummary = gemini.ai_summary || e.ai_decision_summary || 'No summary available.';
-  const requiredDepts = Array.isArray(gemini.required_departments) ? gemini.required_departments : (e.recommended_departments ? e.recommended_departments.split(', ') : []);
-  const risks = Array.isArray(gemini.possible_risks) ? gemini.possible_risks : (e.possible_risks ? e.possible_risks.split(', ') : []);
-  const actions = Array.isArray(gemini.suggested_rescue_actions) ? gemini.suggested_rescue_actions : (e.suggested_actions ? e.suggested_actions.split(', ') : []);
-  const address = gemini.address || 'N/A';
-  const landmark = gemini.landmark || e.landmark || 'N/A';
+  // citizen_analysis  → what the citizen SEES (translated into their language)
+  // system_analysis   → backend routing only (always English, used by Control Room / Team)
+  const hasDualFormat = geminiRaw.system_analysis && geminiRaw.citizen_analysis
+    && typeof geminiRaw.system_analysis === 'object'
+    && typeof geminiRaw.citizen_analysis === 'object';
+
+  const citizenData = hasDualFormat ? geminiRaw.citizen_analysis : geminiRaw;
+  // system_analysis is not used for display here — DB columns (e.incident_type, e.severity, etc.)
+  // already hold the English values sourced from system_analysis at submission time.
+
+  // ── Citizen-facing display fields (from citizen_analysis / translated) ──
+  const aiSummary    = citizenData.ai_summary    || e.ai_decision_summary || 'No summary available.';
+  const displayIncidentType = citizenData.incident_type || e.incident_type; // translated if available
+
+  const requiredDepts = Array.isArray(citizenData.required_departments)
+    ? citizenData.required_departments
+    : (e.recommended_departments ? e.recommended_departments.split(', ') : []);
+
+  const risks = Array.isArray(citizenData.possible_risks)
+    ? citizenData.possible_risks
+    : (e.possible_risks ? e.possible_risks.split(', ') : []);
+
+  const actions = Array.isArray(citizenData.suggested_rescue_actions)
+    ? citizenData.suggested_rescue_actions
+    : (e.suggested_actions ? e.suggested_actions.split(', ') : []);
+
+  const address  = citizenData.address  || 'N/A';
+  const landmark = citizenData.landmark || e.landmark || 'N/A';
+
+
 
   const confidenceCircumference = 2 * Math.PI * 42; // r=42
   const dashOffset = confidenceCircumference * (1 - e.confidence_score / 100);
@@ -825,9 +851,9 @@ function renderResultPage(e, root) {
       <div class="result-hero-card glass-card severity-${sevClass}">
         <div class="emergency-id-badge">Emergency ID: ${e.emergency_id}</div>
         <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.5rem;">
-          ${severityBadge(e.severity)}
+          ${severityBadge(e.severity, citizenData.severity || e.severity)}
         </div>
-        <div class="result-incident-type">${e.incident_type}</div>
+        <div class="result-incident-type">${displayIncidentType}</div>
         <p style="color:var(--text-secondary);font-size:0.88rem;line-height:1.6;margin-top:0.5rem;">${e.description}</p>
 
         <div class="result-meta-grid">
@@ -1134,6 +1160,21 @@ const STEP_DESCRIPTIONS = [
 function renderTrackingPage(data, root) {
   const { emergency: e, tracking_steps, current_step_index } = data;
 
+  // Parse complete Gemini AI JSON stored in the DB to extract localized display content
+  let geminiRaw = {};
+  try {
+    if (e.ai_analysis_json) geminiRaw = JSON.parse(e.ai_analysis_json);
+  } catch (err) {
+    console.error('Error parsing ai_analysis_json:', err);
+  }
+
+  const hasDualFormat = geminiRaw.system_analysis && geminiRaw.citizen_analysis
+    && typeof geminiRaw.system_analysis === 'object'
+    && typeof geminiRaw.citizen_analysis === 'object';
+
+  const citizenData = hasDualFormat ? geminiRaw.citizen_analysis : geminiRaw;
+  const displayIncidentType = citizenData.incident_type || e.incident_type;
+
   const stepsHTML = tracking_steps.map((step, i) => {
     let cls = '';
     if (i < current_step_index) cls = 'completed';
@@ -1154,9 +1195,9 @@ function renderTrackingPage(data, root) {
     <div class="tracking-wrapper">
       <div class="tracking-hero glass-card">
         <div class="eid">Emergency ID: ${e.emergency_id}</div>
-        ${severityBadge(e.severity)}
+        ${severityBadge(e.severity, citizenData.severity || e.severity)}
         <div class="current-status-label">${e.status}</div>
-        <p style="font-size:0.82rem;color:var(--text-secondary);margin-top:0.5rem;">${e.incident_type} · ${e.recommended_team}</p>
+        <p style="font-size:0.82rem;color:var(--text-secondary);margin-top:0.5rem;">${displayIncidentType} · ${e.recommended_team}</p>
       </div>
 
       <div class="glass-card" style="margin-bottom:1.5rem;">
@@ -1189,11 +1230,11 @@ function renderTrackingPage(data, root) {
           <div style="display:flex;flex-direction:column;gap:.75rem;">
             <div>
               <p style="font-size:0.72rem;color:var(--text-muted);">LOCATION</p>
-              <p style="font-size:0.88rem;">${e.landmark || (e.lat ? `${e.lat}, ${e.lng}` : 'Not specified')}</p>
+              <p style="font-size:0.88rem;">${citizenData.landmark || e.landmark || (e.lat ? `${e.lat}, ${e.lng}` : 'Not specified')}</p>
             </div>
             <div>
               <p style="font-size:0.72rem;color:var(--text-muted);">DEPARTMENTS</p>
-              <p style="font-size:0.88rem;">${e.recommended_departments || 'N/A'}</p>
+              <p style="font-size:0.88rem;">${Array.isArray(citizenData.required_departments) ? citizenData.required_departments.join(', ') : (e.recommended_departments || 'N/A')}</p>
             </div>
             <div>
               <p style="font-size:0.72rem;color:var(--text-muted);">NEAREST TEAM</p>
@@ -1201,7 +1242,7 @@ function renderTrackingPage(data, root) {
             </div>
             <div>
               <p style="font-size:0.72rem;color:var(--text-muted);">RESPONSE ETA</p>
-              <p style="font-size:0.88rem;">${e.response_time_minutes} minutes</p>
+              <p style="font-size:0.88rem;">${citizenData.estimated_response_time || e.response_time_minutes || 'N/A'} minutes</p>
             </div>
             <div>
               <p style="font-size:0.72rem;color:var(--text-muted);">SUBMITTED</p>
@@ -1449,8 +1490,8 @@ export async function initControlRoom() {
   await refresh();
   initFilters(root, statsEl);
 
-  // Auto-refresh every 30 seconds so completed missions appear immediately
-  setInterval(refresh, 30000);
+  // Auto-refresh every 10 seconds for real-time status synchronisation across all portals
+  setInterval(refresh, 10000);
 }
 
 
@@ -1910,8 +1951,8 @@ export async function initTeamDashboard() {
     if (bannerPrimary) bannerPrimary.textContent  = currentPrimaryTeam;
     if (bannerIcon)    bannerIcon.textContent     = UNIT_ICONS[currentPrimaryTeam] || '🚒';
     loadMissions();
-    // Auto-refresh every 30s
-    setInterval(loadMissions, 30000);
+    // Auto-refresh every 10s for real-time status synchronisation
+    setInterval(loadMissions, 10000);
   }
 
   async function loadMissions() {
