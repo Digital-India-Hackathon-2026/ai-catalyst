@@ -995,6 +995,7 @@ async function updateTaskProgress(cid, targetStatus, before_image = null, progre
     alert("Connection error.");
   }
 }
+window.updateTaskProgress = updateTaskProgress;
 
 
 // --- ADMIN INTELLIGENT ROUTING & CONTROL ---
@@ -1510,6 +1511,11 @@ progressTrigger.addEventListener("click", () => progressFileInput.click());
 progressFileInput.addEventListener("change", (e) => {
   const file = e.target.files[0];
   if (file) {
+    if (file.size > 10 * 1024 * 1024) {
+      alert("File size must be under 10MB");
+      progressFileInput.value = "";
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (event) => {
       progressPreview.src = event.target.result;
@@ -1523,7 +1529,7 @@ progressFileInput.addEventListener("change", (e) => {
 document.getElementById("btn-submit-progress").onclick = async () => {
   const cid = document.getElementById("progress-complaint-id").value;
   const status = document.getElementById("progress-target-status").value;
-  const image = progressPreview.src || null;
+  const image = (progressPreview.style.display === "block" && progressPreview.src && progressPreview.src.startsWith("data:")) ? progressPreview.src : null;
   const comments = document.getElementById("progress-reasons").value.trim();
   
   if (!image && (status === "Work Started" || status === "Resolved")) {
