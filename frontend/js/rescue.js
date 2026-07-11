@@ -787,26 +787,47 @@ function renderResultPage(e, root) {
     'Pending Review':              '📋',
   }[e.status] || '📋';
 
-  // Parse complete Gemini JSON response — supports both old flat format and new dual-language format
+  // ── Parse Gemini AI JSON stored in the DB ──────────────────────────────
+  // Supports both:
+  //   • New dual-language format: { system_analysis: {...}, citizen_analysis: {...} }
+  //   • Old flat format:          { incident_type, ai_summary, ... }
   let geminiRaw = {};
   try {
-    if (e.ai_analysis_json) {
-      geminiRaw = JSON.parse(e.ai_analysis_json);
-    }
+    if (e.ai_analysis_json) geminiRaw = JSON.parse(e.ai_analysis_json);
   } catch (err) {
-    console.error("Error parsing ai_analysis_json:", err);
+    console.error('Error parsing ai_analysis_json:', err);
   }
-  // If the new dual-language format is present, use system_analysis for all technical fields
-  const gemini = (geminiRaw.system_analysis && typeof geminiRaw.system_analysis === 'object')
-    ? geminiRaw.system_analysis
-    : geminiRaw;
 
-  const aiSummary = gemini.ai_summary || e.ai_decision_summary || 'No summary available.';
-  const requiredDepts = Array.isArray(gemini.required_departments) ? gemini.required_departments : (e.recommended_departments ? e.recommended_departments.split(', ') : []);
-  const risks = Array.isArray(gemini.possible_risks) ? gemini.possible_risks : (e.possible_risks ? e.possible_risks.split(', ') : []);
-  const actions = Array.isArray(gemini.suggested_rescue_actions) ? gemini.suggested_rescue_actions : (e.suggested_actions ? e.suggested_actions.split(', ') : []);
-  const address = gemini.address || 'N/A';
-  const landmark = gemini.landmark || e.landmark || 'N/A';
+  // citizen_analysis  → what the citizen SEES (translated into their language)
+  // system_analysis   → backend routing only (always English, used by Control Room / Team)
+  const hasDualFormat = geminiRaw.system_analysis && geminiRaw.citizen_analysis
+    && typeof geminiRaw.system_analysis === 'object'
+    && typeof geminiRaw.citizen_analysis === 'object';
+
+  const citizenData = hasDualFormat ? geminiRaw.citizen_analysis : geminiRaw;
+  // system_analysis is not used for display here — DB columns (e.incident_type, e.severity, etc.)
+  // already hold the English values sourced from system_analysis at submission time.
+
+  // ── Citizen-facing display fields (from citizen_analysis / translated) ──
+  const aiSummary    = citizenData.ai_summary    || e.ai_decision_summary || 'No summary available.';
+  const displayIncidentType = citizenData.incident_type || e.incident_type; // translated if available
+
+  const requiredDepts = Array.isArray(citizenData.required_departments)
+    ? citizenData.required_departments
+    : (e.recommended_departments ? e.recommended_departments.split(', ') : []);
+
+  const risks = Array.isArray(citizenData.possible_risks)
+    ? citizenData.possible_risks
+    : (e.possible_risks ? e.possible_risks.split(', ') : []);
+
+  const actions = Array.isArray(citizenData.suggested_rescue_actions)
+    ? citizenData.suggested_rescue_actions
+    : (e.suggested_actions ? e.suggested_actions.split(', ') : []);
+
+  const address  = citizenData.address  || 'N/A';
+  const landmark = citizenData.landmark || e.landmark || 'N/A';
+
+
 
   const confidenceCircumference = 2 * Math.PI * 42; // r=42
   const dashOffset = confidenceCircumference * (1 - e.confidence_score / 100);
@@ -831,7 +852,7 @@ function renderResultPage(e, root) {
         <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.5rem;">
           ${severityBadge(e.severity)}
         </div>
-        <div class="result-incident-type">${e.incident_type}</div>
+        <div class="result-incident-type">${displayIncidentType}</div>
         <p style="color:var(--text-secondary);font-size:0.88rem;line-height:1.6;margin-top:0.5rem;">${e.description}</p>
 
         <div class="result-meta-grid">
